@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "seshat"
 version = "0.1.0"
 description = "A research memory layer: passive capture and reconstruction of what you tried and why."
-readme = "Seshat.md"
+readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Dumee-25" }]
