@@ -12,9 +12,15 @@ license = { text = "MIT" }
 authors = [{ name = "Dumee-25" }]
 dependencies = [
     "click>=8.1",
+    "chromadb>=1.0",
 ]
 
 [project.optional-dependencies]
+# Local embedding model (bge-small-en-v1.5). Optional because it pulls in
+# torch; CI and tests use an injected lightweight embedder instead.
+embeddings = [
+    "sentence-transformers>=3.0",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.4",
