@@ -52,7 +52,12 @@ class WatchService:
         store: Store,
         log: Callable[[str], None] = lambda msg: None,
         on_session_closed: Callable[[int], None] | None = None,
+        background_task: Callable[[], None] | None = None,
     ) -> None:
+        # background_task runs on each idle check (~every 30s); Phase 3 uses it
+        # to drain the inference queue. It runs inline on the loop thread, so a
+        # long generation delays (but never loses) queued file events.
+        self._background_task = background_task
         self.root = root.resolve()
         self._config = config
         self._store = store
@@ -167,6 +172,8 @@ class WatchService:
                 if now - last_idle_check >= IDLE_CHECK_SECONDS:
                     last_idle_check = now
                     self._tracker.flush_if_idle()
+                    if self._background_task is not None:
+                        self._background_task()
         finally:
             observer.stop()
             observer.join()

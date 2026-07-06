@@ -244,6 +244,12 @@ class Store:
         ).fetchall()
         return [self._entry_from_row(r) for r in rows]
 
+    def delete_entries(self, session_id: int) -> int:
+        """Remove a session's entries (reprocess replaces them). Raw events stay."""
+        cur = self._conn.execute("DELETE FROM entries WHERE session_id = ?", (session_id,))
+        self._conn.commit()
+        return cur.rowcount
+
     def set_intent(self, entry_id: int, intent: str, status: str = "corrected") -> None:
         """The one-click correction path: user fixes an inferred intent."""
         if status not in ("confirmed", "corrected"):

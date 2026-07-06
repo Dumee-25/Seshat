@@ -126,5 +126,9 @@ class VectorStore:
             )
         ]
 
+    def delete(self, collection: str, ids: list[str]) -> None:
+        if ids:
+            self._collection(collection).delete(ids=ids)
+
     def count(self, collection: str) -> int:
         return self._collection(collection).count()

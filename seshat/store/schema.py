@@ -109,6 +109,30 @@ MIGRATIONS: list[str] = [
         updated_at TEXT NOT NULL
     );
     """,
+    # v3: entry ids must never be reused. Reprocessing deletes and re-adds
+    # entries; without AUTOINCREMENT, SQLite recycles the freed rowid and a
+    # stale citation would silently point at different content.
+    """
+    CREATE TABLE entries_v3 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id INTEGER NOT NULL REFERENCES sessions(id),
+        what_changed TEXT NOT NULL,
+        observable_outcome TEXT,
+        inferred_intent TEXT,
+        intent_confidence REAL,
+        intent_status TEXT NOT NULL DEFAULT 'inferred'
+            CHECK (intent_status IN ('inferred', 'confirmed', 'corrected')),
+        files_touched TEXT NOT NULL DEFAULT '[]',
+        raw_event_ids TEXT NOT NULL DEFAULT '[]',
+        model_version TEXT NOT NULL,
+        prompt_version TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    );
+    INSERT INTO entries_v3 SELECT * FROM entries;
+    DROP TABLE entries;
+    ALTER TABLE entries_v3 RENAME TO entries;
+    CREATE INDEX idx_entries_session ON entries(session_id);
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

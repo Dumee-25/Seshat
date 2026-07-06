@@ -34,12 +34,12 @@ def test_commands_require_config(tmp_path: Path):
 
 
 def test_stub_commands_point_at_build_plan(tmp_path: Path):
-    # `watch` is real as of Phase 2 and must NOT be invoked here: it would
-    # start a live watch loop inside the test runner.
+    # Only commands still stubbed belong here. `watch` must NOT be invoked
+    # with a valid config: it would start a live watch loop inside the runner.
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
         assert runner.invoke(main, ["init"]).exit_code == 0
-        for command in ("backfill", "reprocess", "ui"):
+        for command in ("backfill", "ui"):
             result = runner.invoke(main, [command])
             assert result.exit_code != 0
             assert "BUILD_PLAN.md" in result.output

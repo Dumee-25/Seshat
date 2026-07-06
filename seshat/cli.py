@@ -45,8 +45,29 @@ def _not_yet(phase: str) -> None:
     raise click.ClickException(f"Not implemented yet - coming in {phase} of BUILD_PLAN.md.")
 
 
+def _make_worker(config, store, quiet_log=None):
+    from seshat.inference.provider import get_provider
+    from seshat.inference.queue import InferenceWorker
+    from seshat.store.vectors import VectorStore
+
+    vectors = VectorStore(Path(".").resolve())
+    provider = get_provider(config)
+    return InferenceWorker(
+        store,
+        vectors,
+        provider,
+        cpu_fallback=config.inference.cpu_fallback,
+        log=quiet_log or click.echo,
+    )
+
+
 @main.command()
-def watch() -> None:
+@click.option(
+    "--no-journal",
+    is_flag=True,
+    help="Capture only; don't generate journal entries while watching.",
+)
+def watch(no_journal: bool) -> None:
     """Watch the project and capture work sessions (Ctrl+C to stop)."""
     from seshat.store.db import Store
     from seshat.watcher.daemon import WatchService
@@ -54,13 +75,35 @@ def watch() -> None:
     config = _require_config()
     root = Path(".").resolve()
     with Store.open(root) as store:
-        service = WatchService(root, config, store, log=click.echo)
+        background = None
+        if not no_journal:
+            worker = _make_worker(config, store)
+            background = lambda: worker.run_pending()  # noqa: E731
+        service = WatchService(root, config, store, log=click.echo, background_task=background)
         indexed = service.baseline_scan()
         click.echo(f"Baseline: {indexed} new file(s) snapshotted.")
         try:
             service.run()
         except KeyboardInterrupt:
             click.echo("Stopped.")
+
+
+@main.command()
+@click.option("--force", is_flag=True, help="Run even if the GPU is busy.")
+def process(force: bool) -> None:
+    """Generate journal entries for all captured-but-unprocessed sessions."""
+    from seshat.store.db import Store
+
+    config = _require_config()
+    with Store.open(Path(".").resolve()) as store:
+        worker = _make_worker(config, store)
+        pending = worker.pending_sessions()
+        if not pending:
+            click.echo("Nothing to process.")
+            return
+        click.echo(f"{len(pending)} session(s) queued.")
+        written = worker.run_pending(force=force)
+        click.echo(f"Wrote {written} journal entr{'y' if written == 1 else 'ies'}.")
 
 
 @main.command("install-hooks")
@@ -102,10 +145,41 @@ def backfill() -> None:
 
 
 @main.command()
-def reprocess() -> None:
-    """Regenerate journal entries from stored raw events."""
-    _require_config()
-    _not_yet("Phase 3")
+@click.option("--session", "session_id", type=int, default=None,
+              help="Reprocess one session (default: every processed session).")
+def reprocess(session_id: int | None) -> None:
+    """Regenerate journal entries from stored raw events.
+
+    Useful after a model or prompt upgrade: old entries are replaced, raw
+    events are never touched.
+    """
+    from seshat.inference.journal import generate_entry
+    from seshat.inference.provider import GenerationError, get_provider
+    from seshat.store.db import Store
+    from seshat.store.vectors import VectorStore
+
+    config = _require_config()
+    root = Path(".").resolve()
+    with Store.open(root) as store:
+        vectors = VectorStore(root)
+        provider = get_provider(config)
+        if session_id is not None:
+            targets = [session_id]
+        else:
+            targets = [s.id for s in store.sessions(status="processed")]
+        if not targets:
+            click.echo("No processed sessions to reprocess.")
+            return
+        done = 0
+        for sid in targets:
+            try:
+                entry = generate_entry(store, vectors, provider, sid)
+            except GenerationError as exc:
+                raise click.ClickException(f"session {sid}: {exc}") from exc
+            if entry is not None:
+                done += 1
+                click.echo(f"session {sid}: entry {entry.id} ({provider.model_version})")
+        click.echo(f"Reprocessed {done} session(s).")
 
 
 @main.command()

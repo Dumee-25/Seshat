@@ -4,29 +4,13 @@ The real bge-small-en-v1.5 model is exercised only when SESHAT_REAL_EMBEDDINGS=1
 (it downloads ~130 MB on first run); CI uses the fake embedder to stay fast.
 """
 
-import math
 import os
 from pathlib import Path
-from zlib import crc32
 
 import pytest
+from conftest import fake_embedder
 
 from seshat.store.vectors import VectorStore, VectorStoreError
-
-DIMS = 64
-
-
-def fake_embedder(texts: list[str]) -> list[list[float]]:
-    # crc32, not hash(): built-in hash() is randomized per process, which made
-    # this embedder rank differently from run to run.
-    vectors = []
-    for text in texts:
-        vec = [0.0] * DIMS
-        for token in text.lower().split():
-            vec[crc32(token.encode()) % DIMS] += 1.0
-        norm = math.sqrt(sum(v * v for v in vec)) or 1.0
-        vectors.append([v / norm for v in vec])
-    return vectors
 
 
 @pytest.fixture

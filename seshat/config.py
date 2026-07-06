@@ -46,7 +46,12 @@ papers_dir = "papers"
 idle_gap_minutes = 45
 
 [inference]
-provider = "local"  # "local" or "api"
+provider = "local"  # "local" (Ollama) or "api" (any OpenAI-compatible endpoint)
+model = "qwen3:8b"
+# base_url defaults to http://localhost:11434 for "local". For "api", set it
+# here or via SESHAT_API_BASE; the key comes from SESHAT_API_KEY.
+base_url = ""
+# When true, journal generation runs even while the GPU is busy training.
 cpu_fallback = false
 """
 
@@ -73,6 +78,8 @@ class SessionConfig:
 @dataclass
 class InferenceConfig:
     provider: str = "local"
+    model: str = "qwen3:8b"
+    base_url: str = ""
     cpu_fallback: bool = False
 
 
@@ -131,6 +138,8 @@ def load_config(root: Path) -> SeshatConfig:
     )
     inference = InferenceConfig(
         provider=_get(raw, "inference", "provider", str, default="local"),
+        model=_get(raw, "inference", "model", str, default="qwen3:8b"),
+        base_url=_get(raw, "inference", "base_url", str, default=""),
         cpu_fallback=_get(raw, "inference", "cpu_fallback", bool, default=False),
     )
 
