@@ -12,7 +12,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
 
-from seshat.store.schema import MIGRATIONS, Edge, JournalEntry, Paper, RawEvent, Session
+from seshat.store.schema import (
+    MIGRATIONS,
+    ChatMessage,
+    Edge,
+    JournalEntry,
+    Paper,
+    RawEvent,
+    Session,
+)
 
 STATE_DIR = ".seshat"
 DB_FILENAME = "seshat.sqlite3"
@@ -300,6 +308,42 @@ class Store:
             (path, content, utcnow()),
         )
         self._conn.commit()
+
+    # -- chat history -------------------------------------------------------------
+
+    def add_chat_message(
+        self, role: str, text: str, session_ids: list[int] | None = None
+    ) -> int:
+        if role not in ("user", "assistant"):
+            raise StoreError(f"Chat role must be 'user' or 'assistant', got {role!r}.")
+        cur = self._conn.execute(
+            "INSERT INTO chat_messages (ts, role, text, session_ids) VALUES (?, ?, ?, ?)",
+            (utcnow(), role, text, json.dumps(session_ids or [])),
+        )
+        self._conn.commit()
+        return cur.lastrowid
+
+    def chat_history(self) -> list[ChatMessage]:
+        """Messages of the current (uncleared) conversation, oldest first."""
+        rows = self._conn.execute(
+            "SELECT * FROM chat_messages WHERE cleared = 0 ORDER BY id"
+        ).fetchall()
+        return [
+            ChatMessage(
+                id=r["id"],
+                ts=r["ts"],
+                role=r["role"],
+                text=r["text"],
+                session_ids=json.loads(r["session_ids"]),
+            )
+            for r in rows
+        ]
+
+    def clear_chat(self) -> int:
+        """Start a fresh conversation. Messages are hidden, not deleted."""
+        cur = self._conn.execute("UPDATE chat_messages SET cleared = 1 WHERE cleared = 0")
+        self._conn.commit()
+        return cur.rowcount
 
     # -- query log (dogfooding metric) ------------------------------------------
 

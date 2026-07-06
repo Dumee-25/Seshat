@@ -143,6 +143,20 @@ MIGRATIONS: list[str] = [
         question TEXT NOT NULL
     );
     """,
+    # v5: persistent chat history. Citations are stored as session ids, not
+    # entry snapshots, so answers keep pointing at the *current* entry for a
+    # session even after `seshat reprocess` regenerates it. "Clearing" the
+    # chat hides messages from the UI but keeps the record.
+    """
+    CREATE TABLE chat_messages (
+        id INTEGER PRIMARY KEY,
+        ts TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+        text TEXT NOT NULL,
+        session_ids TEXT NOT NULL DEFAULT '[]',
+        cleared INTEGER NOT NULL DEFAULT 0
+    );
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)
@@ -179,6 +193,15 @@ class JournalEntry:
     model_version: str = "unknown"
     prompt_version: str = "unknown"
     created_at: str | None = None
+    id: int | None = None
+
+
+@dataclass
+class ChatMessage:
+    role: str  # "user" | "assistant"
+    text: str
+    session_ids: list[int] = field(default_factory=list)
+    ts: str | None = None
     id: int | None = None
 
 

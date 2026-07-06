@@ -120,6 +120,31 @@ def test_edges_between_node_types(store: Store):
         store.add_edge("session", session_id, "banana", 1, "produced")
 
 
+def test_chat_history_roundtrip(store: Store):
+    store.add_chat_message("user", "have I tried SMOTE?")
+    store.add_chat_message("assistant", "Yes, twice [session 3].", session_ids=[3, 7])
+    history = store.chat_history()
+    assert [m.role for m in history] == ["user", "assistant"]
+    assert history[1].session_ids == [3, 7]
+    assert history[0].ts is not None
+
+
+def test_clear_chat_hides_but_keeps_messages(store: Store):
+    store.add_chat_message("user", "old question")
+    assert store.clear_chat() == 1
+    assert store.chat_history() == []
+    store.add_chat_message("user", "new conversation")
+    assert [m.text for m in store.chat_history()] == ["new conversation"]
+    # The record itself is preserved, only hidden.
+    total = store._conn.execute("SELECT COUNT(*) AS n FROM chat_messages").fetchone()["n"]
+    assert total == 2
+
+
+def test_chat_rejects_bad_role(store: Store):
+    with pytest.raises(StoreError, match="role"):
+        store.add_chat_message("system", "nope")
+
+
 def test_events_filter_by_kind(store: Store):
     store.append_event("notebook_diff", {})
     store.append_event("git_commit", {})
