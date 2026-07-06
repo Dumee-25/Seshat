@@ -63,6 +63,8 @@ class QueryEngine:
         until: str | None = None,
     ) -> tuple[list[SessionCitation], list[PaperCitation]]:
         """Vector hits, then structured filters against the SQLite side."""
+        if until and len(until) == 10:  # bare YYYY-MM-DD must include that day
+            until = until + "T23:59:59+00:00"
         citations: list[SessionCitation] = []
         for hit in self._vectors.query("entries", question, n_results=max(k * 3, 12)):
             try:

@@ -33,6 +33,9 @@ def papers_near_session(store: Store, session: Session) -> list[Paper]:
         added = datetime.fromisoformat(paper.added_at)
         if start <= added <= end:
             nearby.append(paper)
+    # Most recently read first: yesterday's paper is a likelier inspiration
+    # than one from six days ago.
+    nearby.sort(key=lambda p: p.added_at, reverse=True)
     return nearby[:MAX_PAPERS]
 
 

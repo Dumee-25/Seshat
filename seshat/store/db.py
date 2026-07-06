@@ -39,8 +39,13 @@ class Store:
         # check_same_thread=False: the watch service may run its processing
         # loop on a thread other than the one that opened the store. All
         # writes still happen on a single thread at a time.
-        conn = sqlite3.connect(state_dir / DB_FILENAME, check_same_thread=False)
+        # timeout=15: the post-commit hook writes from a separate process
+        # while `seshat watch` holds the database.
+        conn = sqlite3.connect(
+            state_dir / DB_FILENAME, check_same_thread=False, timeout=15
+        )
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")  # concurrent hook + daemon writers
         conn.execute("PRAGMA foreign_keys = ON")
         store = cls(conn)
         store._migrate()

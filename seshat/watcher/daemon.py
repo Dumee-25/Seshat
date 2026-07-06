@@ -8,6 +8,7 @@ one logical save).
 
 from __future__ import annotations
 
+import os
 import queue
 import threading
 import time
@@ -17,7 +18,7 @@ from pathlib import Path
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-from seshat.config import SeshatConfig
+from seshat.config import ALWAYS_IGNORED_DIRS, SeshatConfig
 from seshat.papers.ingest import PaperIngestError, ingest_pdf
 from seshat.store.db import Store
 from seshat.store.vectors import VectorStore
@@ -142,11 +143,19 @@ class WatchService:
             return True
         return False
 
+    def _walk_files(self):
+        """Like rglob, but prunes ignored directories instead of descending
+        into them — data/, .venv/, mlruns/ can hold millions of files."""
+        for dirpath, dirnames, filenames in os.walk(self.root):
+            dirnames[:] = [d for d in dirnames if d not in ALWAYS_IGNORED_DIRS]
+            for name in filenames:
+                yield Path(dirpath) / name
+
     def baseline_scan(self) -> int:
         """Snapshot watched files (and ingest pre-existing papers) so the
         first real save diffs cleanly."""
         count = 0
-        for path in self.root.rglob("*"):
+        for path in self._walk_files():
             if not path.is_file() or not self._filter.should_index(path):
                 continue
             rel = self._filter.relative(path)
@@ -198,12 +207,19 @@ class WatchService:
                 for path, seen in list(pending.items()):
                     if now - seen >= DEBOUNCE_SECONDS:
                         del pending[path]
-                        self.process_file(path)
+                        # One unreadable/adversarial file must not end capture.
+                        try:
+                            self.process_file(path)
+                        except Exception as exc:  # noqa: BLE001
+                            self._log(f"error processing {path}: {exc}")
                 if now - last_idle_check >= IDLE_CHECK_SECONDS:
                     last_idle_check = now
                     self._tracker.flush_if_idle()
                     if self._background_task is not None:
-                        self._background_task()
+                        try:
+                            self._background_task()
+                        except Exception as exc:  # noqa: BLE001
+                            self._log(f"background task failed (will retry): {exc}")
         finally:
             observer.stop()
             observer.join()

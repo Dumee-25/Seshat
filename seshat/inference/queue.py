@@ -15,7 +15,7 @@ from collections.abc import Callable
 from seshat.inference.journal import generate_entry
 from seshat.inference.provider import GenerationError, LLMProvider
 from seshat.store.db import Store
-from seshat.store.vectors import VectorStore
+from seshat.store.vectors import VectorStore, VectorStoreError
 
 GPU_BUSY_UTILIZATION_PCT = 25
 
@@ -76,7 +76,9 @@ class InferenceWorker:
                 break
             try:
                 entry = generate_entry(self._store, self._vectors, self._provider, session_id)
-            except GenerationError as exc:
+            except (GenerationError, VectorStoreError) as exc:
+                # LLM down, embeddings extra not installed, ... — the session
+                # stays queued; capture must keep running regardless.
                 self._log(f"journal generation failed (will retry): {exc}")
                 break
             if entry is not None:

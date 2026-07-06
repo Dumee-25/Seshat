@@ -68,7 +68,10 @@ def render_session_detail(store: Store, session_id: int) -> None:
         st.divider()
 
 
-def render_entry(store: Store, citation_or_entry, session_id: int) -> None:
+def render_entry(store: Store, citation_or_entry, session_id: int, key_prefix: str) -> None:
+    # key_prefix must be unique per render site: both tabs (and multiple chat
+    # answers citing the same session) render the same entry in one script
+    # run, and duplicate widget keys crash Streamlit.
     entry = citation_or_entry
     st.markdown(entry.what_changed)
     if entry.observable_outcome:
@@ -83,12 +86,13 @@ def render_entry(store: Store, citation_or_entry, session_id: int) -> None:
 
     if entry.intent_status == "inferred" and entry.inferred_intent:
         col_confirm, col_fix = st.columns([1, 3])
-        if col_confirm.button("Confirm intent", key=f"confirm{entry.id}"):
+        if col_confirm.button("Confirm intent", key=f"{key_prefix}confirm{entry.id}"):
             store.set_intent(entry.id, entry.inferred_intent, status="confirmed")
             st.rerun()
         with col_fix:
             corrected = st.text_input(
-                "Correct the intent", key=f"fix{entry.id}", label_visibility="collapsed",
+                "Correct the intent", key=f"{key_prefix}fix{entry.id}",
+                label_visibility="collapsed",
                 placeholder="Correct the intent...",
             )
             if corrected:
@@ -99,11 +103,11 @@ def render_entry(store: Store, citation_or_entry, session_id: int) -> None:
     )
 
 
-def render_citation(store: Store, citation: SessionCitation) -> None:
+def render_citation(store: Store, citation: SessionCitation, key_prefix: str) -> None:
     session = citation.session
     label = f"session {session.id} — {session.started_at}"
     with st.expander(label):
-        render_entry(store, citation.entry, session.id)
+        render_entry(store, citation.entry, session.id, key_prefix)
         st.markdown("**Underlying events**")
         render_session_detail(store, session.id)
 
@@ -117,14 +121,14 @@ def chat_tab(store: Store, engine: QueryEngine) -> None:
 
     if "history" not in st.session_state:
         st.session_state.history = []
-    for role, payload in st.session_state.history:
+    for i, (role, payload) in enumerate(st.session_state.history):
         with st.chat_message(role):
             if role == "user":
                 st.markdown(payload)
             else:
                 st.markdown(payload.text)
                 for citation in payload.citations:
-                    render_citation(store, citation)
+                    render_citation(store, citation, key_prefix=f"chat{i}_")
                 for paper in payload.papers:
                     with st.expander(f'paper: "{paper.title}"'):
                         st.text(paper.snippet)
@@ -154,7 +158,7 @@ def timeline_tab(store: Store) -> None:
         title = entries[0].what_changed[:80] if entries else f"({session.status})"
         with st.expander(f"session {session.id} · {session.started_at} · {title}"):
             for entry in entries:
-                render_entry(store, entry, session.id)
+                render_entry(store, entry, session.id, key_prefix="tl_")
                 st.divider()
             st.markdown("**Events**")
             render_session_detail(store, session.id)
