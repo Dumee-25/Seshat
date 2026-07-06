@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
 
-from seshat.store.schema import MIGRATIONS, Edge, JournalEntry, RawEvent, Session
+from seshat.store.schema import MIGRATIONS, Edge, JournalEntry, Paper, RawEvent, Session
 
 STATE_DIR = ".seshat"
 DB_FILENAME = "seshat.sqlite3"
@@ -312,13 +312,33 @@ class Store:
         ).fetchone()
         return row["id"] if row else None
 
-    def add_paper(self, path: str, title: str | None = None, meta: dict | None = None) -> int:
+    def add_paper(
+        self,
+        path: str,
+        title: str | None = None,
+        meta: dict | None = None,
+        added_at: str | None = None,
+    ) -> int:
         cur = self._conn.execute(
             "INSERT INTO papers (path, title, added_at, meta) VALUES (?, ?, ?, ?)",
-            (path, title, utcnow(), json.dumps(meta or {})),
+            (path, title, added_at or utcnow(), json.dumps(meta or {})),
         )
         self._conn.commit()
         return cur.lastrowid
+
+    def paper_by_path(self, path: str) -> Paper | None:
+        row = self._conn.execute("SELECT * FROM papers WHERE path = ?", (path,)).fetchone()
+        return self._paper_from_row(row) if row else None
+
+    def papers(self) -> list[Paper]:
+        rows = self._conn.execute("SELECT * FROM papers ORDER BY added_at, id").fetchall()
+        return [self._paper_from_row(r) for r in rows]
+
+    @staticmethod
+    def _paper_from_row(row: sqlite3.Row) -> Paper:
+        return Paper(
+            id=row["id"], path=row["path"], title=row["title"], added_at=row["added_at"]
+        )
 
     def add_edge(
         self,

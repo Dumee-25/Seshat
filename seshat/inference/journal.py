@@ -11,8 +11,9 @@ from __future__ import annotations
 import json
 import re
 
-from seshat.inference.prompts import PROMPT_VERSION, build_journal_prompt
+from seshat.inference.prompts import PROMPT_VERSION, build_journal_prompt, render_event
 from seshat.inference.provider import GenerationError, LLMProvider
+from seshat.papers.linking import link_session_papers, paper_context
 from seshat.store.db import Store
 from seshat.store.schema import JournalEntry
 from seshat.store.vectors import VectorStore
@@ -71,7 +72,11 @@ def generate_entry(
             store.mark_session_processed(session_id)
         return None
 
-    parsed = parse_response(provider.generate(build_journal_prompt(session, events)))
+    query_text = "\n".join(render_event(e) for e in events)
+    nearby_papers, papers_block = paper_context(store, vectors, session, query_text)
+    parsed = parse_response(
+        provider.generate(build_journal_prompt(session, events, papers_block))
+    )
 
     confidence = parsed.get("intent_confidence")
     if isinstance(confidence, (int, float)) and not isinstance(confidence, bool):
@@ -100,6 +105,7 @@ def generate_entry(
         texts=[entry_embedding_text(entry)],
         metadatas=[{"session_id": session_id, "entry_id": entry.id}],
     )
+    link_session_papers(store, session_id, nearby_papers)
     if session.status == "closed":
         store.mark_session_processed(session_id)
     return entry

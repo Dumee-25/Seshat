@@ -18,7 +18,9 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from seshat.config import SeshatConfig
+from seshat.papers.ingest import PaperIngestError, ingest_pdf
 from seshat.store.db import Store
+from seshat.store.vectors import VectorStore
 from seshat.watcher import notebooks, results, scripts
 from seshat.watcher.ignore import PathFilter
 from seshat.watcher.sessions import SessionTracker
@@ -53,7 +55,11 @@ class WatchService:
         log: Callable[[str], None] = lambda msg: None,
         on_session_closed: Callable[[int], None] | None = None,
         background_task: Callable[[], None] | None = None,
+        vectors: VectorStore | None = None,
     ) -> None:
+        # vectors is needed only for PDF ingestion; without it, papers
+        # dropped into the watched folder are logged and skipped.
+        self._vectors = vectors
         # background_task runs on each idle check (~every 30s); Phase 3 uses it
         # to drain the inference queue. It runs inline on the loop thread, so a
         # long generation delays (but never loses) queued file events.
@@ -79,6 +85,9 @@ class WatchService:
             return None
         rel = self._filter.relative(path)
 
+        if self._filter.is_paper_file(path):
+            self._ingest_paper(path, rel)
+            return None  # papers aren't session events; linking is by time
         if self._filter.is_result_file(path):
             kind, payload = "result_file", results.index_result_file(self._store, path, rel)
         elif path.suffix == ".ipynb":
@@ -119,13 +128,34 @@ class WatchService:
             return None
         return scripts.diff_script(snapshot, text, rel)
 
+    def _ingest_paper(self, path: Path, rel: str) -> bool:
+        if self._vectors is None:
+            self._log(f"skipping paper {rel}: no vector store configured")
+            return False
+        try:
+            paper_id = ingest_pdf(self._store, self._vectors, path, rel)
+        except PaperIngestError as exc:
+            self._log(f"skipping paper {rel}: {exc}")
+            return False
+        if paper_id is not None:
+            self._log(f"paper ingested: {rel} (paper {paper_id})")
+            return True
+        return False
+
     def baseline_scan(self) -> int:
-        """Snapshot every watched file so the first real save diffs cleanly."""
+        """Snapshot watched files (and ingest pre-existing papers) so the
+        first real save diffs cleanly."""
         count = 0
         for path in self.root.rglob("*"):
             if not path.is_file() or not self._filter.should_index(path):
                 continue
             rel = self._filter.relative(path)
+            if self._filter.is_paper_file(path):
+                # Idempotent; added_at uses file mtime, so an old PDF doesn't
+                # look freshly read to the proximity linker.
+                if self._ingest_paper(path, rel):
+                    count += 1
+                continue
             if self._store.get_snapshot(rel) is not None:
                 continue
             if path.suffix == ".ipynb":

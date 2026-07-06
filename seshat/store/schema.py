@@ -173,6 +173,14 @@ class JournalEntry:
 
 
 @dataclass
+class Paper:
+    path: str
+    title: str | None = None
+    added_at: str | None = None
+    id: int | None = None
+
+
+@dataclass
 class Edge:
     src_type: str
     src_id: int

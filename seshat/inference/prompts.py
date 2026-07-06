@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from seshat.store.schema import RawEvent, Session
 
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"  # v2: optional recently-read-papers context block
 
 MAX_EVENT_CHARS = 1500
 MAX_EVENTS_CHARS = 9000
@@ -34,8 +34,16 @@ metrics. The intent is allowed to be a guess.
 Session from {started_at} to {ended_at}:
 
 {events}
-
+{papers_section}
 JSON:"""
+
+PAPERS_SECTION = """
+Papers the researcher read recently (they may or may not be related; if a \
+change clearly echoes one of them, reflect that in inferred_intent and raise \
+intent_confidence):
+
+{paper_context}
+"""
 
 
 def render_event(event: RawEvent) -> str:
@@ -72,7 +80,9 @@ def render_event(event: RawEvent) -> str:
     return text
 
 
-def build_journal_prompt(session: Session, events: list[RawEvent]) -> str:
+def build_journal_prompt(
+    session: Session, events: list[RawEvent], paper_context: str = ""
+) -> str:
     rendered, used = [], 0
     for event in events:
         block = render_event(event)
@@ -85,4 +95,7 @@ def build_journal_prompt(session: Session, events: list[RawEvent]) -> str:
         started_at=session.started_at,
         ended_at=session.ended_at or "?",
         events="\n\n".join(rendered) or "(no events)",
+        papers_section=(
+            PAPERS_SECTION.format(paper_context=paper_context) if paper_context else ""
+        ),
     )

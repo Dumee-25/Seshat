@@ -45,19 +45,22 @@ def _not_yet(phase: str) -> None:
     raise click.ClickException(f"Not implemented yet - coming in {phase} of BUILD_PLAN.md.")
 
 
-def _make_worker(config, store, quiet_log=None):
-    from seshat.inference.provider import get_provider
-    from seshat.inference.queue import InferenceWorker
+def _make_vectors():
     from seshat.store.vectors import VectorStore
 
-    vectors = VectorStore(Path(".").resolve())
-    provider = get_provider(config)
+    return VectorStore(Path(".").resolve())
+
+
+def _make_worker(config, store, vectors=None):
+    from seshat.inference.provider import get_provider
+    from seshat.inference.queue import InferenceWorker
+
     return InferenceWorker(
         store,
-        vectors,
-        provider,
+        vectors if vectors is not None else _make_vectors(),
+        get_provider(config),
         cpu_fallback=config.inference.cpu_fallback,
-        log=quiet_log or click.echo,
+        log=click.echo,
     )
 
 
@@ -75,11 +78,15 @@ def watch(no_journal: bool) -> None:
     config = _require_config()
     root = Path(".").resolve()
     with Store.open(root) as store:
+        vectors = _make_vectors()
         background = None
         if not no_journal:
-            worker = _make_worker(config, store)
+            worker = _make_worker(config, store, vectors)
             background = lambda: worker.run_pending()  # noqa: E731
-        service = WatchService(root, config, store, log=click.echo, background_task=background)
+        service = WatchService(
+            root, config, store, log=click.echo,
+            background_task=background, vectors=vectors,
+        )
         indexed = service.baseline_scan()
         click.echo(f"Baseline: {indexed} new file(s) snapshotted.")
         try:
