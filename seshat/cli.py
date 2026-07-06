@@ -41,10 +41,6 @@ def init(path: Path, name: str | None, force: bool) -> None:
     click.echo("Edit the [watch] globs if needed, then run `seshat watch` to start capturing.")
 
 
-def _not_yet(phase: str) -> None:
-    raise click.ClickException(f"Not implemented yet - coming in {phase} of BUILD_PLAN.md.")
-
-
 def _make_vectors():
     from seshat.store.vectors import VectorStore
 
@@ -222,9 +218,20 @@ def reprocess(session_id: int | None) -> None:
 
 @main.command()
 def ui() -> None:
-    """Open the chat interface."""
+    """Open the chat + timeline interface in the browser."""
+    import importlib.util
+    import subprocess
+    import sys
+
     _require_config()
-    _not_yet("Phase 6")
+    if importlib.util.find_spec("streamlit") is None:
+        raise click.ClickException(
+            "streamlit is not installed. Run `pip install seshat[ui]` first."
+        )
+    app_path = Path(__file__).parent / "ui" / "app.py"
+    subprocess.run(
+        [sys.executable, "-m", "streamlit", "run", str(app_path)], check=False
+    )
 
 
 def _require_config():

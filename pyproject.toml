@@ -25,6 +25,11 @@ dependencies = [
 embeddings = [
     "sentence-transformers>=3.0",
 ]
+# The Streamlit frontend (`seshat ui`). Optional: heavy, and headless installs
+# (servers, CI) don't need it.
+ui = [
+    "streamlit>=1.35",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.4",

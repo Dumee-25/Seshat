@@ -46,6 +46,41 @@ intent_confidence):
 """
 
 
+ANSWER_PROMPT = """\
+You are Seshat, a research memory assistant. Answer the researcher's question \
+using ONLY the journal entries and paper excerpts below — never invent \
+sessions, metrics, or results that are not in them. Cite sessions inline like \
+[session 12] wherever you draw on one. When an intent is marked inferred, \
+present it as a guess, not a fact. If the records do not contain the answer, \
+say so plainly.
+
+Question: {question}
+
+Journal entries:
+{entries}
+
+{papers_part}Answer:"""
+
+ANSWER_PAPERS_PART = """\
+Paper excerpts from the researcher's reading folder:
+{papers}
+
+"""
+
+
+def build_answer_prompt(
+    question: str, entry_blocks: list[str], paper_blocks: list[str]
+) -> str:
+    papers_part = (
+        ANSWER_PAPERS_PART.format(papers="\n\n".join(paper_blocks)) if paper_blocks else ""
+    )
+    return ANSWER_PROMPT.format(
+        question=question,
+        entries="\n\n".join(entry_blocks) or "(none)",
+        papers_part=papers_part,
+    )
+
+
 def render_event(event: RawEvent) -> str:
     lines = [f"[{event.kind}] {event.path or ''}".rstrip()]
     p = event.payload
