@@ -30,13 +30,24 @@ Everything runs locally: SQLite and ChromaDB for storage, `bge-small-en-v1.5` on
 
 ## Installation
 
-Requires Python 3.11+. For journal generation, install [Ollama](https://ollama.com) and pull a model (`ollama pull qwen3:8b`), or configure an API provider.
+Requires Python 3.11+. Seshat is not on PyPI yet; install it straight from this repository:
 
 ```
-pip install seshat[embeddings,ui]
+python -m pip install "seshat[embeddings,ui] @ git+https://github.com/Dumee-25/Seshat.git"
 ```
 
-The extras are optional: `embeddings` pulls the local embedding model (needed for search and journaling), `ui` pulls Streamlit (needed for the chat interface). A bare `pip install seshat` is enough for capture only.
+Or, from a local clone (editable, so updates apply without reinstalling):
+
+```
+git clone https://github.com/Dumee-25/Seshat.git
+python -m pip install -e "Seshat[embeddings,ui]"
+```
+
+The extras are optional: `embeddings` pulls the local embedding model (needed for search and journaling), `ui` pulls Streamlit (needed for the chat interface). Without extras you get capture only.
+
+For journal generation, install [Ollama](https://ollama.com) and pull a model (`ollama pull qwen3:8b`), or configure an API provider in `seshat.toml`.
+
+Note for Windows/conda users: prefer `python -m pip` over bare `pip` — the `pip.exe` shim in conda environments is sometimes blocked by antivirus ("Access is denied").
 
 ## Quick start
 
