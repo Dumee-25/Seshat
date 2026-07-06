@@ -138,10 +138,41 @@ def record_commit() -> None:
 
 
 @main.command()
-def backfill() -> None:
-    """Reconstruct journal entries from existing git history."""
-    _require_config()
-    _not_yet("Phase 4")
+@click.option(
+    "--process/--no-process",
+    default=False,
+    help="Also generate journal entries now (default: leave them queued).",
+)
+def backfill(process: bool) -> None:
+    """Ingest existing git history as pseudo-sessions.
+
+    Gives a new project a populated timeline on day one. Safe to re-run:
+    already-ingested commits are skipped.
+    """
+    from seshat.backfill.git_history import BackfillError
+    from seshat.backfill.git_history import backfill as run_backfill
+    from seshat.store.db import Store
+
+    config = _require_config()
+    root = Path(".").resolve()
+    with Store.open(root) as store:
+        try:
+            sessions, commits = run_backfill(
+                root, store, config.session.idle_gap_minutes, log=click.echo
+            )
+        except BackfillError as exc:
+            raise click.ClickException(str(exc)) from exc
+        click.echo(f"Backfilled {commits} commit(s) into {sessions} session(s).")
+        if not process:
+            if sessions:
+                click.echo(
+                    "Journal entries are queued; run `seshat process` "
+                    "(or just `seshat watch`) to generate them."
+                )
+            return
+        worker = _make_worker(config, store)
+        written = worker.run_pending()
+        click.echo(f"Wrote {written} journal entr{'y' if written == 1 else 'ies'}.")
 
 
 @main.command()

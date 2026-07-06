@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
-from conftest import fake_embedder
+from conftest import FakeProvider, fake_embedder
 
 from seshat.inference.journal import generate_entry, parse_response
 from seshat.inference.prompts import PROMPT_VERSION, build_journal_prompt
@@ -11,26 +11,6 @@ from seshat.inference.queue import InferenceWorker
 from seshat.store.db import Store
 from seshat.store.schema import RawEvent, Session
 from seshat.store.vectors import VectorStore
-
-
-class FakeProvider:
-    model_version = "fake/test-1"
-
-    def __init__(self, response: str | None = None, fail: bool = False) -> None:
-        self.response = response or json.dumps({
-            "what_changed": "Added SMOTE oversampling before the classifier.",
-            "observable_outcome": "F1 went from 0.61 to 0.68.",
-            "inferred_intent": "addressing class imbalance",
-            "intent_confidence": 0.8,
-        })
-        self.fail = fail
-        self.prompts: list[str] = []
-
-    def generate(self, prompt: str) -> str:
-        if self.fail:
-            raise GenerationError("provider down")
-        self.prompts.append(prompt)
-        return self.response
 
 
 @pytest.fixture

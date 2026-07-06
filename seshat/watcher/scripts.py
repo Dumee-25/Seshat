@@ -62,28 +62,35 @@ def install_post_commit_hook(root: Path) -> Path:
     return hook
 
 
-def read_head_commit(root: Path) -> dict:
-    """Payload describing HEAD: hash, message, changed files, truncated diff."""
+def git_output(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=root, capture_output=True, text=True, check=True,
+        encoding="utf-8", errors="replace",
+    ).stdout
 
-    def git(*args: str) -> str:
-        return subprocess.run(
-            ["git", *args], cwd=root, capture_output=True, text=True, check=True,
-            encoding="utf-8", errors="replace",
-        ).stdout
 
-    commit_hash, subject = git("log", "-1", "--pretty=format:%H%x00%s").split("\x00", 1)
+def read_commit(root: Path, rev: str = "HEAD") -> dict:
+    """Payload describing one commit: hash, timestamps, message, files, diff."""
+    commit_hash, authored_at, subject = git_output(
+        root, "log", "-1", "--pretty=format:%H%x00%aI%x00%s", rev
+    ).split("\x00", 2)
     # --root: a repository's first commit has no parent to diff against.
     files = [
         f
-        for f in git(
-            "diff-tree", "-r", "--root", "--name-only", "--no-commit-id", "HEAD"
+        for f in git_output(
+            root, "diff-tree", "-r", "--root", "--name-only", "--no-commit-id", rev
         ).splitlines()
         if f
     ]
-    diff = git("show", "HEAD", "--format=", "--unified=1")
+    diff = git_output(root, "show", rev, "--format=", "--unified=1")
     return {
         "hash": commit_hash,
+        "authored_at": authored_at,
         "message": truncate_text(subject, 500),
         "files": files,
         "diff": truncate_lines(diff),
     }
+
+
+def read_head_commit(root: Path) -> dict:
+    return read_commit(root, "HEAD")

@@ -39,7 +39,7 @@ def test_stub_commands_point_at_build_plan(tmp_path: Path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
         assert runner.invoke(main, ["init"]).exit_code == 0
-        for command in ("backfill", "ui"):
+        for command in ("ui",):
             result = runner.invoke(main, [command])
             assert result.exit_code != 0
             assert "BUILD_PLAN.md" in result.output
