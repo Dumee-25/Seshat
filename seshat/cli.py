@@ -220,6 +220,7 @@ def reprocess(session_id: int | None) -> None:
 def ui() -> None:
     """Open the chat + timeline interface in the browser."""
     import importlib.util
+    import os
     import subprocess
     import sys
 
@@ -228,9 +229,23 @@ def ui() -> None:
         raise click.ClickException(
             "streamlit is not installed. Run `pip install seshat[ui]` first."
         )
+    # The "kohl" Seshat theme, injected as Streamlit config env vars so the
+    # user configures nothing. setdefault lets a local .streamlit/config.toml
+    # or explicit env override it.
+    theme = {
+        "STREAMLIT_THEME_BASE": "dark",
+        "STREAMLIT_THEME_PRIMARY_COLOR": "#C9A227",
+        "STREAMLIT_THEME_BACKGROUND_COLOR": "#16130F",
+        "STREAMLIT_THEME_SECONDARY_BACKGROUND_COLOR": "#1C1812",
+        "STREAMLIT_THEME_TEXT_COLOR": "#E6DCC4",
+        "STREAMLIT_BROWSER_GATHER_USAGE_STATS": "false",
+    }
+    env = os.environ.copy()
+    for key, value in theme.items():
+        env.setdefault(key, value)
     app_path = Path(__file__).parent / "ui" / "app.py"
     subprocess.run(
-        [sys.executable, "-m", "streamlit", "run", str(app_path)], check=False
+        [sys.executable, "-m", "streamlit", "run", str(app_path)], check=False, env=env
     )
 
 
