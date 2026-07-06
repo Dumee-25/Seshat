@@ -102,7 +102,12 @@ class QueryEngine:
         file_filter: str | None = None,
         since: str | None = None,
         until: str | None = None,
+        record: bool = True,
     ) -> Answer:
+        # record=False is for the eval harness: those aren't the voluntary
+        # queries the dogfooding metric counts.
+        if record:
+            self._store.log_query(question)
         citations, papers = self.retrieve(
             question, k=k, file_filter=file_filter, since=since, until=until
         )

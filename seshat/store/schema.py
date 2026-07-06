@@ -133,6 +133,16 @@ MIGRATIONS: list[str] = [
     ALTER TABLE entries_v3 RENAME TO entries;
     CREATE INDEX idx_entries_session ON entries(session_id);
     """,
+    # v4: log of voluntary chat queries — the dogfooding metric from
+    # Seshat.md §8. If queries/week isn't rising, the capture layer isn't
+    # earning its keep. Eval-harness queries are deliberately not logged.
+    """
+    CREATE TABLE query_log (
+        id INTEGER PRIMARY KEY,
+        ts TEXT NOT NULL,
+        question TEXT NOT NULL
+    );
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

@@ -1,0 +1,17 @@
+[
+  {
+    "question": "Have I tried SMOTE before?",
+    "expect_sessions": [1],
+    "expect_keywords": ["smote"]
+  },
+  {
+    "question": "Why is region_code dropped in preprocessing?",
+    "expect_sessions": [3],
+    "expect_keywords": ["region_code"]
+  },
+  {
+    "question": "When did validation AUC first exceed 0.8?",
+    "expect_sessions": [2],
+    "expect_keywords": ["0.83"]
+  }
+]

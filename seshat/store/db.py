@@ -296,6 +296,18 @@ class Store:
         )
         self._conn.commit()
 
+    # -- query log (dogfooding metric) ------------------------------------------
+
+    def log_query(self, question: str, ts: str | None = None) -> None:
+        self._conn.execute(
+            "INSERT INTO query_log (ts, question) VALUES (?, ?)", (ts or utcnow(), question)
+        )
+        self._conn.commit()
+
+    def query_log(self) -> list[tuple[str, str]]:
+        rows = self._conn.execute("SELECT ts, question FROM query_log ORDER BY ts").fetchall()
+        return [(r["ts"], r["question"]) for r in rows]
+
     # -- artifacts, papers, edges ---------------------------------------------
 
     def add_artifact(self, path: str, kind: str, meta: dict | None = None) -> int:
