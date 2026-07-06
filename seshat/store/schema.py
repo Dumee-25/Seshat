@@ -99,6 +99,16 @@ MIGRATIONS: list[str] = [
     CREATE INDEX idx_edges_src ON edges(src_type, src_id);
     CREATE INDEX idx_edges_dst ON edges(dst_type, dst_id);
     """,
+    # v2: latest-indexed snapshots of watched files, so the watcher can diff a
+    # save against what it last saw. Mutable by design (unlike raw_events):
+    # only the newest version is kept; history lives in the diffs.
+    """
+    CREATE TABLE snapshots (
+        path TEXT PRIMARY KEY,
+        content TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

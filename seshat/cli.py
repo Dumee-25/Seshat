@@ -47,9 +47,51 @@ def _not_yet(phase: str) -> None:
 
 @main.command()
 def watch() -> None:
-    """Watch the project and capture work sessions."""
+    """Watch the project and capture work sessions (Ctrl+C to stop)."""
+    from seshat.store.db import Store
+    from seshat.watcher.daemon import WatchService
+
+    config = _require_config()
+    root = Path(".").resolve()
+    with Store.open(root) as store:
+        service = WatchService(root, config, store, log=click.echo)
+        indexed = service.baseline_scan()
+        click.echo(f"Baseline: {indexed} new file(s) snapshotted.")
+        try:
+            service.run()
+        except KeyboardInterrupt:
+            click.echo("Stopped.")
+
+
+@main.command("install-hooks")
+def install_hooks() -> None:
+    """Install the post-commit git hook that records commits."""
+    from seshat.watcher.scripts import install_post_commit_hook
+
     _require_config()
-    _not_yet("Phase 2")
+    try:
+        hook = install_post_commit_hook(Path(".").resolve())
+    except (FileNotFoundError, FileExistsError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Installed {hook}")
+
+
+@main.command("record-commit", hidden=True)
+def record_commit() -> None:
+    """Record HEAD as a git_commit event (called by the post-commit hook)."""
+    from seshat.store.db import Store
+    from seshat.watcher.scripts import read_head_commit
+    from seshat.watcher.sessions import SessionTracker
+
+    config = _require_config()
+    root = Path(".").resolve()
+    payload = read_head_commit(root)
+    with Store.open(root) as store:
+        tracker = SessionTracker(store, config.session.idle_gap_minutes)
+        session_id = tracker.on_event()
+        event_id = store.append_event("git_commit", payload)
+        store.assign_events_to_session([event_id], session_id)
+    click.echo(f"Recorded commit {payload['hash'][:7]} (session {session_id})")
 
 
 @main.command()
@@ -73,9 +115,9 @@ def ui() -> None:
     _not_yet("Phase 6")
 
 
-def _require_config() -> None:
+def _require_config():
     try:
-        load_config(Path("."))
+        return load_config(Path("."))
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
 

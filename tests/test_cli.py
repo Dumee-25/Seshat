@@ -24,9 +24,9 @@ def test_init_twice_fails_without_force(tmp_path: Path):
     assert result.exit_code == 0
 
 
-def test_stub_commands_require_config(tmp_path: Path):
+def test_commands_require_config(tmp_path: Path):
     runner = CliRunner()
-    for command in ("watch", "backfill", "reprocess", "ui"):
+    for command in ("watch", "backfill", "reprocess", "ui", "install-hooks"):
         with runner.isolated_filesystem(temp_dir=tmp_path):
             result = runner.invoke(main, [command])
             assert result.exit_code != 0
@@ -34,10 +34,12 @@ def test_stub_commands_require_config(tmp_path: Path):
 
 
 def test_stub_commands_point_at_build_plan(tmp_path: Path):
+    # `watch` is real as of Phase 2 and must NOT be invoked here: it would
+    # start a live watch loop inside the test runner.
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
         assert runner.invoke(main, ["init"]).exit_code == 0
-        for command in ("watch", "backfill", "reprocess", "ui"):
+        for command in ("backfill", "reprocess", "ui"):
             result = runner.invoke(main, [command])
             assert result.exit_code != 0
             assert "BUILD_PLAN.md" in result.output

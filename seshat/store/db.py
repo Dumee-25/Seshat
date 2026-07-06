@@ -36,7 +36,10 @@ class Store:
     def open(cls, root: Path) -> Store:
         state_dir = root / STATE_DIR
         state_dir.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(state_dir / DB_FILENAME)
+        # check_same_thread=False: the watch service may run its processing
+        # loop on a thread other than the one that opened the store. All
+        # writes still happen on a single thread at a time.
+        conn = sqlite3.connect(state_dir / DB_FILENAME, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         store = cls(conn)
@@ -46,7 +49,7 @@ class Store:
     @classmethod
     def in_memory(cls) -> Store:
         """An ephemeral store, for tests."""
-        conn = sqlite3.connect(":memory:")
+        conn = sqlite3.connect(":memory:", check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         store = cls(conn)
@@ -270,6 +273,23 @@ class Store:
             created_at=row["created_at"],
         )
 
+    # -- snapshots (latest indexed version of each watched file) ---------------
+
+    def get_snapshot(self, path: str) -> str | None:
+        row = self._conn.execute(
+            "SELECT content FROM snapshots WHERE path = ?", (path,)
+        ).fetchone()
+        return row["content"] if row else None
+
+    def set_snapshot(self, path: str, content: str) -> None:
+        self._conn.execute(
+            "INSERT INTO snapshots (path, content, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(path) DO UPDATE SET content = excluded.content, "
+            "updated_at = excluded.updated_at",
+            (path, content, utcnow()),
+        )
+        self._conn.commit()
+
     # -- artifacts, papers, edges ---------------------------------------------
 
     def add_artifact(self, path: str, kind: str, meta: dict | None = None) -> int:
@@ -279,6 +299,12 @@ class Store:
         )
         self._conn.commit()
         return cur.lastrowid
+
+    def artifact_id_for_path(self, path: str) -> int | None:
+        row = self._conn.execute(
+            "SELECT id FROM artifacts WHERE path = ? ORDER BY id DESC LIMIT 1", (path,)
+        ).fetchone()
+        return row["id"] if row else None
 
     def add_paper(self, path: str, title: str | None = None, meta: dict | None = None) -> int:
         cur = self._conn.execute(
