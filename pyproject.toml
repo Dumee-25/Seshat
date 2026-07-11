@@ -28,6 +28,13 @@ dependencies = [
 ui = [
     "streamlit>=1.35",
 ]
+# The native desktop shell (`seshat app`): a window (pywebview) plus a
+# system-tray watcher (pystray). Needs the `ui` extra too.
+desktop = [
+    "pywebview>=5.0",
+    "pystray>=0.19",
+    "pillow>=10.0",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.4",

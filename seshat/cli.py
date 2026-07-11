@@ -221,33 +221,44 @@ def reprocess(session_id: int | None) -> None:
 def ui() -> None:
     """Open the chat + timeline interface in the browser."""
     import importlib.util
-    import os
     import subprocess
     import sys
+
+    from seshat.app.server import APP_SCRIPT, theme_env
 
     _require_config()
     if importlib.util.find_spec("streamlit") is None:
         raise click.ClickException(
             "streamlit is not installed. Run `pip install seshat[ui]` first."
         )
-    # The "kohl" Seshat theme, injected as Streamlit config env vars so the
-    # user configures nothing. setdefault lets a local .streamlit/config.toml
-    # or explicit env override it.
-    theme = {
-        "STREAMLIT_THEME_BASE": "dark",
-        "STREAMLIT_THEME_PRIMARY_COLOR": "#C9A227",
-        "STREAMLIT_THEME_BACKGROUND_COLOR": "#16130F",
-        "STREAMLIT_THEME_SECONDARY_BACKGROUND_COLOR": "#1C1812",
-        "STREAMLIT_THEME_TEXT_COLOR": "#E6DCC4",
-        "STREAMLIT_BROWSER_GATHER_USAGE_STATS": "false",
-    }
-    env = os.environ.copy()
-    for key, value in theme.items():
-        env.setdefault(key, value)
-    app_path = Path(__file__).parent / "ui" / "app.py"
     subprocess.run(
-        [sys.executable, "-m", "streamlit", "run", str(app_path)], check=False, env=env
+        [sys.executable, "-m", "streamlit", "run", str(APP_SCRIPT)],
+        check=False,
+        env=theme_env(),
     )
+
+
+@main.command()
+def app() -> None:
+    """Launch the Seshat desktop app: a native window plus a background,
+    tray-based watcher (Ctrl+C or the tray's Quit to stop)."""
+    import importlib.util
+
+    config = _require_config()
+    missing = [
+        name
+        for name in ("streamlit", "webview", "pystray", "PIL")
+        if importlib.util.find_spec(name) is None
+    ]
+    if missing:
+        raise click.ClickException(
+            "The desktop app needs extra packages "
+            f"({', '.join(sorted(missing))}). Install them with "
+            "`pip install \"seshat[ui,desktop]\"`."
+        )
+    from seshat.app.desktop import run_desktop
+
+    run_desktop(Path(".").resolve(), config, log=click.echo)
 
 
 @main.command("eval")
