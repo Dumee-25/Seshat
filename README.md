@@ -43,7 +43,7 @@ git clone https://github.com/Dumee-25/Seshat.git
 python -m pip install -e "Seshat[ui]"
 ```
 
-The `ui` extra pulls Streamlit for the chat interface; without it you get capture and the CLI. There is no separate embeddings extra — embeddings run through Ollama.
+The `ui` extra pulls Streamlit for the chat interface; without it you get capture and the CLI. Add the `desktop` extra (`seshat[ui,desktop]`) for the native desktop app. There is no separate embeddings extra — embeddings run through Ollama.
 
 For generation and search, install [Ollama](https://ollama.com) and pull both models:
 
@@ -73,10 +73,21 @@ seshat ui              # chat + timeline in the browser
 
 Journal entries are generated in the background while `seshat watch` runs, or on demand with `seshat process`.
 
+### Desktop app
+
+With the `desktop` extra installed, a single command replaces the separate watch and UI terminals:
+
+```
+seshat app
+```
+
+It opens a native window for the chat and timeline, and runs the watcher in the background behind a system-tray icon. The tray shows status (watching, and how many sessions are queued for journaling), can pause capture, opens the window on demand, and quits everything cleanly. On Windows the window uses the built-in WebView2 runtime — no browser tab, no extra download.
+
 ## Commands
 
 | Command | Purpose |
 |---|---|
+| `seshat app` | Launch the desktop app: native window plus a background, tray-based watcher. |
 | `seshat init` | Create the project configuration (`seshat.toml`). |
 | `seshat watch` | Watch the project and capture work sessions. `--no-journal` captures without generating entries. |
 | `seshat backfill` | Ingest existing git history as pseudo-sessions. Safe to re-run; already-ingested commits are skipped. |

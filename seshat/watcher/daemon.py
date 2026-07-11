@@ -77,11 +77,26 @@ class WatchService:
         )
         self._queue: queue.Queue[Path] = queue.Queue()
         self._stop = threading.Event()
+        self._paused = threading.Event()
+
+    # -- pause (desktop tray "Pause watching") --------------------------------
+
+    def pause(self) -> None:
+        self._paused.set()
+
+    def resume(self) -> None:
+        self._paused.clear()
+
+    @property
+    def paused(self) -> bool:
+        return self._paused.is_set()
 
     # -- processing -----------------------------------------------------------
 
     def process_file(self, path: Path) -> int | None:
         """Index one saved file. Returns the raw event id, or None if skipped."""
+        if self._paused.is_set():
+            return None  # capture is paused; drop the event
         if not path.is_file() or not self._filter.should_index(path):
             return None
         rel = self._filter.relative(path)
