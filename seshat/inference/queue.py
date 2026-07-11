@@ -77,8 +77,8 @@ class InferenceWorker:
             try:
                 entry = generate_entry(self._store, self._vectors, self._provider, session_id)
             except (GenerationError, VectorStoreError) as exc:
-                # LLM down, embeddings extra not installed, ... — the session
-                # stays queued; capture must keep running regardless.
+                # Ollama unreachable, embedding model not pulled, ... — the
+                # session stays queued; capture must keep running regardless.
                 self._log(f"journal generation failed (will retry): {exc}")
                 break
             if entry is not None:

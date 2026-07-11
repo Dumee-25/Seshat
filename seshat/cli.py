@@ -41,10 +41,11 @@ def init(path: Path, name: str | None, force: bool) -> None:
     click.echo("Edit the [watch] globs if needed, then run `seshat watch` to start capturing.")
 
 
-def _make_vectors():
+def _make_vectors(config):
+    from seshat.inference.provider import get_embedder
     from seshat.store.vectors import VectorStore
 
-    return VectorStore(Path(".").resolve())
+    return VectorStore(Path(".").resolve(), get_embedder(config))
 
 
 def _make_worker(config, store, vectors=None):
@@ -53,7 +54,7 @@ def _make_worker(config, store, vectors=None):
 
     return InferenceWorker(
         store,
-        vectors if vectors is not None else _make_vectors(),
+        vectors if vectors is not None else _make_vectors(config),
         get_provider(config),
         cpu_fallback=config.inference.cpu_fallback,
         log=click.echo,
@@ -74,7 +75,7 @@ def watch(no_journal: bool) -> None:
     config = _require_config()
     root = Path(".").resolve()
     with Store.open(root) as store:
-        vectors = _make_vectors()
+        vectors = _make_vectors(config)
         background = None
         if not no_journal:
             worker = _make_worker(config, store, vectors)
@@ -188,14 +189,14 @@ def reprocess(session_id: int | None) -> None:
     events are never touched.
     """
     from seshat.inference.journal import generate_entry
-    from seshat.inference.provider import GenerationError, get_provider
+    from seshat.inference.provider import GenerationError, get_embedder, get_provider
     from seshat.store.db import Store
     from seshat.store.vectors import VectorStore
 
     config = _require_config()
     root = Path(".").resolve()
     with Store.open(root) as store:
-        vectors = VectorStore(root)
+        vectors = VectorStore(root, get_embedder(config))
         provider = get_provider(config)
         if session_id is not None:
             targets = [session_id]
@@ -270,7 +271,7 @@ def eval_command(questions_path: Path, k: int, retrieval_only: bool, json_out: P
     config = _require_config()
     root = Path(".").resolve()
     with Store.open(root) as store:
-        engine = QueryEngine(store, _make_vectors(), get_provider(config))
+        engine = QueryEngine(store, _make_vectors(config), get_provider(config))
         try:
             cases = load_cases(questions_path)
             report = run_eval(engine, cases, k=k, retrieval_only=retrieval_only)

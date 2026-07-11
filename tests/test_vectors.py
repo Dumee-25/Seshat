@@ -1,7 +1,8 @@
 """Vector store tests using a deterministic bag-of-words embedder.
 
-The real bge-small-en-v1.5 model is exercised only when SESHAT_REAL_EMBEDDINGS=1
-(it downloads ~130 MB on first run); CI uses the fake embedder to stay fast.
+The real Ollama embedding model is exercised only when SESHAT_REAL_EMBEDDINGS=1
+(it needs a running Ollama with nomic-embed-text pulled); CI uses the fake
+embedder to stay fast and offline.
 """
 
 import os
@@ -72,10 +73,12 @@ def test_persists_across_reopen(tmp_path: Path):
 
 @pytest.mark.skipif(
     os.environ.get("SESHAT_REAL_EMBEDDINGS") != "1",
-    reason="set SESHAT_REAL_EMBEDDINGS=1 to test the real bge-small model",
+    reason="set SESHAT_REAL_EMBEDDINGS=1 to test against a running Ollama",
 )
 def test_real_model_end_to_end(tmp_path: Path):
-    vs = VectorStore(tmp_path)  # default SentenceTransformerEmbedder
+    from seshat.inference.provider import OllamaProvider
+
+    vs = VectorStore(tmp_path, OllamaProvider("qwen3:8b").embed)
     vs.add("entries", list(DOCS), list(DOCS.values()))
     hits = vs.query("entries", "have I tried resampling for imbalanced classes?")
     assert hits[0].id == "e1"

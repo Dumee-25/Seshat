@@ -26,17 +26,33 @@ Seshat is a pipeline of four layers, each feeding the next:
 
 4. **Query.** `seshat ui` opens a chat over the whole history. Retrieval is hybrid: vector search over journal entries and paper chunks combined with structured filters (file path, date range). Every answer cites the sessions it draws on, and each citation expands to the underlying diffs and outputs, so trust never rests on the model's word alone.
 
-Everything runs locally: SQLite and ChromaDB for storage, `bge-small-en-v1.5` on CPU for embeddings, Ollama for generation. Nothing leaves the machine, including telemetry. Users who prefer quality over privacy can point the provider at any OpenAI-compatible API instead.
+Everything runs locally and in a single SQLite file: the store, the graph, and the vector index (via `sqlite-vec`) all live in one `.seshat/seshat.sqlite3`. Ollama serves both generation and embeddings, so there is no heavyweight ML runtime to install. Nothing leaves the machine, including telemetry. Users who prefer quality over privacy can point the provider at any OpenAI-compatible API instead.
 
 ## Installation
 
-Requires Python 3.11+. For journal generation, install [Ollama](https://ollama.com) and pull a model (`ollama pull qwen3:8b`), or configure an API provider.
+Requires Python 3.11+. Seshat is not on PyPI yet; install it straight from this repository:
 
 ```
-pip install seshat[embeddings,ui]
+python -m pip install "seshat[ui] @ git+https://github.com/Dumee-25/Seshat.git"
 ```
 
-The extras are optional: `embeddings` pulls the local embedding model (needed for search and journaling), `ui` pulls Streamlit (needed for the chat interface). A bare `pip install seshat` is enough for capture only.
+Or, from a local clone (editable, so updates apply without reinstalling):
+
+```
+git clone https://github.com/Dumee-25/Seshat.git
+python -m pip install -e "Seshat[ui]"
+```
+
+The `ui` extra pulls Streamlit for the chat interface; without it you get capture and the CLI. There is no separate embeddings extra — embeddings run through Ollama.
+
+For generation and search, install [Ollama](https://ollama.com) and pull both models:
+
+```
+ollama pull qwen3:8b          # journal generation
+ollama pull nomic-embed-text  # search embeddings
+```
+
+Note for Windows/conda users: prefer `python -m pip` over bare `pip` — the `pip.exe` shim in conda environments is sometimes blocked by antivirus ("Access is denied").
 
 ## Quick start
 
@@ -88,6 +104,7 @@ idle_gap_minutes = 45
 [inference]
 provider = "local"     # "local" (Ollama) or "api" (OpenAI-compatible)
 model = "qwen3:8b"
+embed_model = "nomic-embed-text"
 ```
 
 All Seshat state lives in `.seshat/` inside the project, which is gitignored by default.
