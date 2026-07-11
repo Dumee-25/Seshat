@@ -28,6 +28,8 @@ class LLMProvider(Protocol):
 
     def generate(self, prompt: str) -> str: ...
 
+    def embed(self, texts: list[str]) -> list[list[float]]: ...
+
 
 def _post_json(url: str, body: dict, headers: dict | None = None) -> dict:
     request = urllib.request.Request(
@@ -46,8 +48,9 @@ def _post_json(url: str, body: dict, headers: dict | None = None) -> dict:
 
 
 class OllamaProvider:
-    def __init__(self, model: str, base_url: str = "") -> None:
+    def __init__(self, model: str, base_url: str = "", embed_model: str = "") -> None:
         self._model = model
+        self._embed_model = embed_model or "nomic-embed-text"
         self._base_url = (base_url or OLLAMA_DEFAULT_URL).rstrip("/")
         self.model_version = f"ollama/{model}"
 
@@ -65,18 +68,37 @@ class OllamaProvider:
             raise GenerationError(f"Unexpected Ollama response: {result.get('error', result)}")
         return result["response"]
 
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        result = _post_json(
+            f"{self._base_url}/api/embed",
+            {"model": self._embed_model, "input": texts},
+        )
+        embeddings = result.get("embeddings")
+        if not embeddings:
+            raise GenerationError(
+                f"Ollama returned no embeddings (is '{self._embed_model}' pulled? "
+                f"`ollama pull {self._embed_model}`): {result.get('error', result)}"
+            )
+        return embeddings
+
 
 class OpenAICompatProvider:
-    def __init__(self, model: str, base_url: str, api_key: str) -> None:
+    def __init__(
+        self, model: str, base_url: str, api_key: str, embed_model: str = ""
+    ) -> None:
         if not base_url:
             raise GenerationError(
                 "provider = \"api\" needs a base_url in seshat.toml [inference] "
                 "or the SESHAT_API_BASE environment variable."
             )
         self._model = model
+        self._embed_model = embed_model or "text-embedding-3-small"
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self.model_version = f"api/{model}"
+
+    def _auth(self) -> dict:
+        return {"Authorization": f"Bearer {self._api_key}"} if self._api_key else {}
 
     def generate(self, prompt: str) -> str:
         result = _post_json(
@@ -86,20 +108,37 @@ class OpenAICompatProvider:
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.2,
             },
-            headers={"Authorization": f"Bearer {self._api_key}"} if self._api_key else {},
+            headers=self._auth(),
         )
         try:
             return result["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise GenerationError(f"Unexpected API response: {result}") from exc
 
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        result = _post_json(
+            f"{self._base_url}/embeddings",
+            {"model": self._embed_model, "input": texts},
+            headers=self._auth(),
+        )
+        try:
+            return [item["embedding"] for item in result["data"]]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise GenerationError(f"Unexpected embeddings response: {result}") from exc
+
 
 def get_provider(config: SeshatConfig) -> LLMProvider:
     inference = config.inference
     if inference.provider == "local":
-        return OllamaProvider(inference.model, inference.base_url)
+        return OllamaProvider(inference.model, inference.base_url, inference.embed_model)
     return OpenAICompatProvider(
         inference.model,
         inference.base_url or os.environ.get("SESHAT_API_BASE", ""),
         os.environ.get("SESHAT_API_KEY", ""),
+        inference.embed_model,
     )
+
+
+def get_embedder(config: SeshatConfig):
+    """An embedder callable (list[str] -> list[list[float]]) for the VectorStore."""
+    return get_provider(config).embed

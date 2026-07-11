@@ -48,6 +48,9 @@ idle_gap_minutes = 45
 [inference]
 provider = "local"  # "local" (Ollama) or "api" (any OpenAI-compatible endpoint)
 model = "qwen3:8b"
+# Embedding model for search (also served by Ollama / the API provider).
+# Pull it once with `ollama pull nomic-embed-text`.
+embed_model = "nomic-embed-text"
 # base_url defaults to http://localhost:11434 for "local". For "api", set it
 # here or via SESHAT_API_BASE; the key comes from SESHAT_API_KEY.
 base_url = ""
@@ -79,6 +82,7 @@ class SessionConfig:
 class InferenceConfig:
     provider: str = "local"
     model: str = "qwen3:8b"
+    embed_model: str = "nomic-embed-text"
     base_url: str = ""
     cpu_fallback: bool = False
 
@@ -139,6 +143,7 @@ def load_config(root: Path) -> SeshatConfig:
     inference = InferenceConfig(
         provider=_get(raw, "inference", "provider", str, default="local"),
         model=_get(raw, "inference", "model", str, default="qwen3:8b"),
+        embed_model=_get(raw, "inference", "embed_model", str, default="nomic-embed-text"),
         base_url=_get(raw, "inference", "base_url", str, default=""),
         cpu_fallback=_get(raw, "inference", "cpu_fallback", bool, default=False),
     )

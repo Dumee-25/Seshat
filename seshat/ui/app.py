@@ -83,12 +83,13 @@ st.set_page_config(page_title="Seshat", layout="wide")
 
 @st.cache_resource
 def open_project(root_str: str):
+    from seshat.inference.provider import get_embedder
     from seshat.store.vectors import VectorStore
 
     root = Path(root_str)
     config = load_config(root)
     store = Store.open(root)
-    engine = QueryEngine(store, VectorStore(root), get_provider(config))
+    engine = QueryEngine(store, VectorStore(root, get_embedder(config)), get_provider(config))
     return config, store, engine
 
 

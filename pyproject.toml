@@ -12,7 +12,7 @@ license = { text = "MIT" }
 authors = [{ name = "Dumee-25" }]
 dependencies = [
     "click>=8.1",
-    "chromadb>=1.0",
+    "sqlite-vec>=0.1.6",
     "watchdog>=4.0",
     "pathspec>=0.12",
     "nvidia-ml-py>=12.0",
@@ -20,13 +20,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Local embedding model (bge-small-en-v1.5). Optional because it pulls in
-# torch; CI and tests use an injected lightweight embedder instead.
-embeddings = [
-    "sentence-transformers>=3.0",
-]
 # The Streamlit frontend (`seshat ui`). Optional: heavy, and headless installs
 # (servers, CI) don't need it.
+# Embeddings now go through Ollama (or the configured API provider), so there
+# is no torch/sentence-transformers dependency — that is what makes Seshat
+# packageable as a desktop app.
 ui = [
     "streamlit>=1.35",
 ]
