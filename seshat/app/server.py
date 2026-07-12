@@ -16,7 +16,7 @@ import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 
-APP_SCRIPT = Path(__file__).resolve().parent.parent / "ui" / "app.py"
+from seshat.app.launch import APP_SCRIPT, streamlit_command
 
 # The "kohl" Seshat theme, passed to Streamlit as config env vars (see
 # seshat.ui.app). Centralised here so `seshat ui` and `seshat app` agree.
@@ -77,12 +77,7 @@ class StreamlitServer:
         return f"http://localhost:{self.port}"
 
     def command(self, port: int) -> list[str]:
-        return [
-            self._python, "-m", "streamlit", "run", str(self._app_script),
-            "--server.port", str(port),
-            "--server.address", "localhost",
-            "--server.headless", "true",
-        ]
+        return streamlit_command(port, self._app_script)
 
     def is_running(self) -> bool:
         return self._proc is not None and self._proc.poll() is None

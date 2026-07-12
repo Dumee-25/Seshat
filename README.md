@@ -83,11 +83,15 @@ seshat app
 
 It opens a native window for the chat and timeline, and runs the watcher in the background behind a system-tray icon. The tray shows status (watching, and how many sessions are queued for journaling), can pause capture, opens the window on demand, and quits everything cleanly. On Windows the window uses the built-in WebView2 runtime — no browser tab, no extra download.
 
+To build a double-click Windows installer (`SeshatSetup.exe`) from source, see [packaging/README.md](packaging/README.md).
+
 ## Commands
 
 | Command | Purpose |
 |---|---|
 | `seshat app` | Launch the desktop app: native window plus a background, tray-based watcher. |
+| `seshat setup` | Check Ollama and pull the models Seshat needs (`--no-pull` to only report). |
+| `seshat autostart` | Run the desktop app at login (`--enable` / `--disable` / `--status`, Windows). |
 | `seshat init` | Create the project configuration (`seshat.toml`). |
 | `seshat watch` | Watch the project and capture work sessions. `--no-journal` captures without generating entries. |
 | `seshat backfill` | Ingest existing git history as pseudo-sessions. Safe to re-run; already-ingested commits are skipped. |

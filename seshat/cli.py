@@ -244,7 +244,9 @@ def app() -> None:
     tray-based watcher (Ctrl+C or the tray's Quit to stop)."""
     import importlib.util
 
-    config = _require_config()
+    from seshat.app.userconfig import resolve_project, set_default_project
+    from seshat.config import load_config
+
     missing = [
         name
         for name in ("streamlit", "webview", "pystray", "PIL")
@@ -256,9 +258,64 @@ def app() -> None:
             f"({', '.join(sorted(missing))}). Install them with "
             "`pip install \"seshat[ui,desktop]\"`."
         )
+    # An installed app is launched with no useful cwd, so fall back to the
+    # remembered project. Launching from a project directory (re)sets it.
+    root = resolve_project()
+    if root is None:
+        raise click.ClickException(
+            "No Seshat project to open. Run `seshat init` in your project "
+            "directory, then `seshat app` there once to remember it."
+        )
+    try:
+        config = load_config(root)
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+    set_default_project(root)
+
     from seshat.app.desktop import run_desktop
 
-    run_desktop(Path(".").resolve(), config, log=click.echo)
+    run_desktop(root, config, log=click.echo)
+
+
+@main.command()
+@click.option("--no-pull", is_flag=True, help="Report missing models but don't pull them.")
+def setup(no_pull: bool) -> None:
+    """Check Ollama and pull the models Seshat needs."""
+    from seshat.app.setup import run_setup
+
+    config = _require_config()
+    report = run_setup(config, pull=not no_pull, log=click.echo)
+    click.echo(f"Ollama installed: {report.ollama_installed}")
+    click.echo(f"Ollama running:   {report.ollama_running}")
+    if report.pulled:
+        click.echo(f"Pulled: {', '.join(report.pulled)}")
+    if report.missing:
+        click.echo(f"Still missing: {', '.join(report.missing)}")
+    click.echo("Setup OK." if report.ok else "Setup incomplete - see messages above.")
+
+
+@main.command()
+@click.option("--enable", "action", flag_value="enable", help="Run Seshat at login.")
+@click.option("--disable", "action", flag_value="disable", help="Stop running at login.")
+@click.option("--status", "action", flag_value="status", default=True,
+              help="Show whether Seshat runs at login (default).")
+def autostart(action: str) -> None:
+    """Manage running the desktop app automatically at login (Windows)."""
+    from seshat.app import autostart as autostart_mod
+
+    try:
+        if action == "enable":
+            autostart_mod.enable()
+            click.echo("Seshat will start at login.")
+        elif action == "disable":
+            autostart_mod.disable()
+            click.echo("Seshat will no longer start at login.")
+        else:
+            click.echo(
+                "Runs at login." if autostart_mod.is_enabled() else "Does not run at login."
+            )
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 @main.command("eval")
