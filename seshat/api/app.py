@@ -9,20 +9,69 @@ API cross-origin.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from seshat.config import SeshatConfig
 from seshat.query.timeline import KINDS, build_timeline
-from seshat.store.db import Store
+from seshat.store.db import Store, StoreError
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
-def create_app(root: Path, config: SeshatConfig) -> FastAPI:
+class ChatRequest(BaseModel):
+    question: str
+    file_filter: str | None = None
+    since: str | None = None
+    until: str | None = None
+
+
+@contextmanager
+def _default_engine(root: Path, config: SeshatConfig) -> Iterator[tuple]:
+    """Build a QueryEngine and hand back (engine, its store). The store is
+    shared so a chat request logs its history through the same connection the
+    answer was generated with."""
+    from seshat.inference.provider import get_embedder, get_provider
+    from seshat.query.engine import QueryEngine
+    from seshat.store.vectors import VectorStore
+
+    store = Store.open(root)
+    vectors = VectorStore(root, get_embedder(config))
+    try:
+        yield QueryEngine(store, vectors, get_provider(config)), store
+    finally:
+        store.close()
+        vectors.close()
+
+
+def _resolve_citations(store: Store, session_ids: list[int]) -> list[dict]:
+    """Turn cited session ids into rows the frontend can render and click
+    through to the timeline, even for old chat history."""
+    out = []
+    for sid in session_ids:
+        try:
+            session = store.get_session(sid)
+        except StoreError:
+            continue
+        entries = store.entries(session_id=sid)
+        out.append({
+            "session_id": sid,
+            "started_at": session.started_at,
+            "what_changed": entries[0].what_changed if entries else None,
+        })
+    return out
+
+
+def create_app(
+    root: Path, config: SeshatConfig, engine_cm: Callable | None = None
+) -> FastAPI:
     root = Path(root)
+    engine_cm = engine_cm or (lambda: _default_engine(root, config))
     app = FastAPI(title="Seshat", version="0.1.0")
 
     # The frozen build serves same-origin, but the Vite dev server is a
@@ -66,14 +115,10 @@ def create_app(root: Path, config: SeshatConfig) -> FastAPI:
 
     @app.get("/api/sessions/{session_id}")
     def session_detail(session_id: int) -> dict:
-        from seshat.store.db import StoreError
-
         with store() as s:
             try:
                 session = s.get_session(session_id)
             except StoreError:
-                from fastapi import HTTPException
-
                 raise HTTPException(status_code=404, detail="No such session") from None
             entries = s.entries(session_id=session_id)
             events = s.events(session_id=session_id)
@@ -101,6 +146,55 @@ def create_app(root: Path, config: SeshatConfig) -> FastAPI:
                     for ev in events
                 ],
             }
+
+    @app.get("/api/chat/history")
+    def chat_history() -> dict:
+        with store() as s:
+            return {
+                "messages": [
+                    {
+                        "role": m.role,
+                        "text": m.text,
+                        "ts": m.ts,
+                        "citations": _resolve_citations(s, m.session_ids),
+                    }
+                    for m in s.chat_history()
+                ]
+            }
+
+    @app.post("/api/chat")
+    def chat(req: ChatRequest) -> dict:
+        from seshat.inference.provider import GenerationError
+
+        with engine_cm() as (engine, s):
+            s.add_chat_message("user", req.question)
+            try:
+                answer = engine.ask(
+                    req.question,
+                    file_filter=req.file_filter,
+                    since=req.since,
+                    until=req.until,
+                )
+            except GenerationError as exc:
+                raise HTTPException(
+                    status_code=503, detail=f"The model is unavailable: {exc}"
+                ) from exc
+            session_ids = [c.session.id for c in answer.citations]
+            s.add_chat_message("assistant", answer.text, session_ids=session_ids)
+            return {
+                "answer": answer.text,
+                "citations": _resolve_citations(s, session_ids),
+                "papers": [
+                    {"title": p.title, "snippet": p.snippet, "path": p.path}
+                    for p in answer.papers
+                ],
+            }
+
+    @app.post("/api/chat/clear")
+    def chat_clear() -> dict:
+        with store() as s:
+            cleared = s.clear_chat()
+        return {"cleared": cleared}
 
     if STATIC_DIR.exists():
         from fastapi.staticfiles import StaticFiles
