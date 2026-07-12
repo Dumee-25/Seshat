@@ -249,6 +249,32 @@ def create_app(
                 "content": s.get_paper_content(paper_id) or "",
             }
 
+    @app.get("/api/data")
+    def data() -> dict:
+        from seshat.query.data import list_artifacts
+
+        with store() as s:
+            return {"artifacts": list_artifacts(s)}
+
+    @app.get("/api/data/{artifact_id}")
+    def data_detail(artifact_id: int) -> dict:
+        from seshat.query.data import artifact_sessions, preview_file
+
+        with store() as s:
+            artifact = s.get_artifact(artifact_id)
+            if artifact is None:
+                raise HTTPException(status_code=404, detail="No such artifact")
+            return {
+                "artifact": {
+                    "id": artifact.id,
+                    "path": artifact.path,
+                    "kind": artifact.kind,
+                    "created_at": artifact.created_at,
+                },
+                "preview": preview_file(root, artifact.path),
+                "sessions": artifact_sessions(s, artifact.path),
+            }
+
     @app.get("/api/files")
     def files() -> dict:
         from seshat.query.files import build_tree, code_files, file_stats

@@ -383,6 +383,17 @@ class Store:
             for r in rows
         ]
 
+    def get_artifact(self, artifact_id: int) -> Artifact | None:
+        row = self._conn.execute(
+            "SELECT * FROM artifacts WHERE id = ?", (artifact_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return Artifact(
+            id=row["id"], path=row["path"], kind=row["kind"],
+            created_at=row["created_at"], meta=json.loads(row["meta"]),
+        )
+
     def artifact_id_for_path(self, path: str) -> int | None:
         row = self._conn.execute(
             "SELECT id FROM artifacts WHERE path = ? ORDER BY id DESC LIMIT 1", (path,)
