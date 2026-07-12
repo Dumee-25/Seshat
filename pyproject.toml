@@ -35,9 +35,18 @@ desktop = [
     "pystray>=0.19",
     "pillow>=10.0",
 ]
+# The cockpit backend (`seshat cockpit`): a FastAPI server for the React
+# workspace. The frontend is built separately (see frontend/).
+cockpit = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.4",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "httpx>=0.27",
 ]
 
 [project.scripts]

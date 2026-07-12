@@ -41,3 +41,9 @@ Thumbs.db
 
 # Env / secrets
 .env
+
+# Frontend (cockpit)
+frontend/node_modules/
+frontend/dist/
+# Built React app served by FastAPI (produced by `npm run build`).
+seshat/api/static/

@@ -14,6 +14,7 @@ from types import TracebackType
 
 from seshat.store.schema import (
     MIGRATIONS,
+    Artifact,
     ChatMessage,
     Edge,
     JournalEntry,
@@ -366,6 +367,21 @@ class Store:
         )
         self._conn.commit()
         return cur.lastrowid
+
+    def artifacts(self) -> list[Artifact]:
+        rows = self._conn.execute(
+            "SELECT * FROM artifacts ORDER BY created_at, id"
+        ).fetchall()
+        return [
+            Artifact(
+                id=r["id"],
+                path=r["path"],
+                kind=r["kind"],
+                created_at=r["created_at"],
+                meta=json.loads(r["meta"]),
+            )
+            for r in rows
+        ]
 
     def artifact_id_for_path(self, path: str) -> int | None:
         row = self._conn.execute(
