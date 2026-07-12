@@ -15,10 +15,10 @@ connection, the tray thread reads status through another. Separate connections
 from __future__ import annotations
 
 import subprocess
-import sys
 import threading
 from pathlib import Path
 
+from seshat.app.launch import window_command
 from seshat.app.server import StreamlitServer
 from seshat.app.supervisor import WatcherSupervisor
 from seshat.config import SeshatConfig
@@ -64,9 +64,7 @@ class DesktopApp:
 
     def _spawn_window(self) -> None:
         if self._server.wait_until_ready():
-            subprocess.Popen(
-                [sys.executable, "-m", "seshat.app.window", self._server.url, "Seshat"]
-            )
+            subprocess.Popen(window_command(self._server.url, "Seshat"))
         else:
             self._log("UI server did not become ready in time.")
 
