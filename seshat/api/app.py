@@ -31,6 +31,24 @@ class ChatRequest(BaseModel):
     until: str | None = None
 
 
+class LinkRequest(BaseModel):
+    url: str
+
+
+def _default_link_ingestor(root: Path, config: SeshatConfig, url: str) -> int | None:
+    from seshat.inference.provider import get_embedder
+    from seshat.papers.web import ingest_url
+    from seshat.store.vectors import VectorStore
+
+    store = Store.open(root)
+    vectors = VectorStore(root, get_embedder(config))
+    try:
+        return ingest_url(store, vectors, url)
+    finally:
+        store.close()
+        vectors.close()
+
+
 @contextmanager
 def _default_engine(root: Path, config: SeshatConfig) -> Iterator[tuple]:
     """Build a QueryEngine and hand back (engine, its store). The store is
@@ -68,10 +86,14 @@ def _resolve_citations(store: Store, session_ids: list[int]) -> list[dict]:
 
 
 def create_app(
-    root: Path, config: SeshatConfig, engine_cm: Callable | None = None
+    root: Path,
+    config: SeshatConfig,
+    engine_cm: Callable | None = None,
+    link_ingestor: Callable[[str], int | None] | None = None,
 ) -> FastAPI:
     root = Path(root)
     engine_cm = engine_cm or (lambda: _default_engine(root, config))
+    link_ingestor = link_ingestor or (lambda url: _default_link_ingestor(root, config, url))
     app = FastAPI(title="Seshat", version="0.1.0")
 
     # The frozen build serves same-origin, but the Vite dev server is a
@@ -195,6 +217,57 @@ def create_app(
         with store() as s:
             cleared = s.clear_chat()
         return {"cleared": cleared}
+
+    @app.get("/api/papers")
+    def papers() -> dict:
+        with store() as s:
+            return {
+                "papers": [
+                    {
+                        "id": p.id,
+                        "title": p.title,
+                        "path": p.path,
+                        "added_at": p.added_at,
+                        "source": p.meta.get("source", "pdf"),
+                    }
+                    for p in s.papers()
+                ]
+            }
+
+    @app.get("/api/papers/{paper_id}")
+    def paper_detail(paper_id: int) -> dict:
+        with store() as s:
+            paper = s.get_paper(paper_id)
+            if paper is None:
+                raise HTTPException(status_code=404, detail="No such paper")
+            return {
+                "id": paper.id,
+                "title": paper.title,
+                "path": paper.path,
+                "added_at": paper.added_at,
+                "source": paper.meta.get("source", "pdf"),
+                "content": s.get_paper_content(paper_id) or "",
+            }
+
+    @app.post("/api/links")
+    def add_link(req: LinkRequest) -> dict:
+        from seshat.papers.ingest import PaperIngestError
+
+        try:
+            paper_id = link_ingestor(req.url)
+        except PaperIngestError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if paper_id is None:
+            raise HTTPException(status_code=409, detail="That URL is already added.")
+        with store() as s:
+            paper = s.get_paper(paper_id)
+        return {
+            "id": paper.id,
+            "title": paper.title,
+            "path": paper.path,
+            "added_at": paper.added_at,
+            "source": "url",
+        }
 
     if STATIC_DIR.exists():
         from fastapi.staticfiles import StaticFiles

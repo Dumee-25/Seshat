@@ -82,7 +82,10 @@ def ingest_pdf(
         added_at = datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat(
             timespec="seconds"
         )
-    paper_id = store.add_paper(rel_path, title=title, added_at=added_at)
+    paper_id = store.add_paper(
+        rel_path, title=title, meta={"source": "pdf"}, added_at=added_at
+    )
+    store.set_paper_content(paper_id, text)
     vectors.add(
         "papers",
         ids=[f"p{paper_id}c{i}" for i in range(len(chunks))],

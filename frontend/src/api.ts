@@ -71,3 +71,38 @@ export async function postChat(question: string): Promise<ChatResponse> {
 }
 
 export const clearChat = () => fetch("/api/chat/clear", { method: "POST" });
+
+export interface PaperListItem {
+  id: number;
+  title: string | null;
+  path: string;
+  added_at: string | null;
+  source: string;
+}
+
+export interface PaperDetail extends PaperListItem {
+  content: string;
+}
+
+export const getPapers = () =>
+  getJSON<{ papers: PaperListItem[] }>("/api/papers").then((r) => r.papers);
+
+export const getPaper = (id: number) => getJSON<PaperDetail>(`/api/papers/${id}`);
+
+export async function addLink(url: string): Promise<PaperListItem> {
+  const res = await fetch("/api/links", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) {
+    let detail = `${res.status}`;
+    try {
+      detail = (await res.json()).detail ?? detail;
+    } catch {
+      /* keep status */
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<PaperListItem>;
+}

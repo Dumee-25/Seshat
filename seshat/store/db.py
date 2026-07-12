@@ -411,10 +411,29 @@ class Store:
         rows = self._conn.execute("SELECT * FROM papers ORDER BY added_at, id").fetchall()
         return [self._paper_from_row(r) for r in rows]
 
+    def get_paper(self, paper_id: int) -> Paper | None:
+        row = self._conn.execute("SELECT * FROM papers WHERE id = ?", (paper_id,)).fetchone()
+        return self._paper_from_row(row) if row else None
+
+    def set_paper_content(self, paper_id: int, text: str) -> None:
+        self._conn.execute(
+            "INSERT INTO paper_content (paper_id, text) VALUES (?, ?) "
+            "ON CONFLICT(paper_id) DO UPDATE SET text = excluded.text",
+            (paper_id, text),
+        )
+        self._conn.commit()
+
+    def get_paper_content(self, paper_id: int) -> str | None:
+        row = self._conn.execute(
+            "SELECT text FROM paper_content WHERE paper_id = ?", (paper_id,)
+        ).fetchone()
+        return row["text"] if row else None
+
     @staticmethod
     def _paper_from_row(row: sqlite3.Row) -> Paper:
         return Paper(
-            id=row["id"], path=row["path"], title=row["title"], added_at=row["added_at"]
+            id=row["id"], path=row["path"], title=row["title"],
+            added_at=row["added_at"], meta=json.loads(row["meta"]),
         )
 
     def add_edge(

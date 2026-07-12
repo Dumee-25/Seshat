@@ -1,9 +1,16 @@
 import { useEffect, useState } from "react";
 import { getStatus, getTimeline, type Status, type TimelineItem } from "./api";
 import { Chat } from "./Chat";
+import { Papers } from "./Papers";
 import { Timeline } from "./Timeline";
 
-type View = "timeline" | "chat";
+type View = "timeline" | "chat" | "papers";
+
+const TITLES: Record<View, [string, string]> = {
+  timeline: ["Timeline", "everything that has happened"],
+  chat: ["Chat", "ask across everything"],
+  papers: ["Papers & links", "your reading, searchable"],
+};
 
 const STAR = (
   <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden>
@@ -28,7 +35,7 @@ const STAR = (
 const PLACES = [
   { id: "timeline", label: "Timeline", ready: true },
   { id: "chat", label: "Chat", ready: true },
-  { id: "papers", label: "Papers & links", ready: false },
+  { id: "papers", label: "Papers & links", ready: true },
   { id: "code", label: "Code", ready: false },
   { id: "data", label: "Data", ready: false },
 ];
@@ -89,33 +96,24 @@ export function App() {
       </aside>
 
       <main className="main">
-        {view === "timeline" ? (
-          <>
-            <h1 className="view-title">Timeline</h1>
-            <div className="view-sub">
-              {status ? status.project : "…"} · everything that has happened
+        <h1 className="view-title">{TITLES[view][0]}</h1>
+        <div className="view-sub">
+          {status ? status.project : "…"} · {TITLES[view][1]}
+        </div>
+        {view === "timeline" &&
+          (error ? (
+            <div className="empty">
+              Can't reach the Seshat API. Is the cockpit server running?
+              <br />
+              <span style={{ fontFamily: "var(--mono)", fontSize: 12 }}>
+                {error}
+              </span>
             </div>
-            {error ? (
-              <div className="empty">
-                Can't reach the Seshat API. Is the cockpit server running?
-                <br />
-                <span style={{ fontFamily: "var(--mono)", fontSize: 12 }}>
-                  {error}
-                </span>
-              </div>
-            ) : (
-              <Timeline items={items} highlightId={highlight} />
-            )}
-          </>
-        ) : (
-          <>
-            <h1 className="view-title">Chat</h1>
-            <div className="view-sub">
-              {status ? status.project : "…"} · ask across everything
-            </div>
-            <Chat onCite={jumpToSession} />
-          </>
-        )}
+          ) : (
+            <Timeline items={items} highlightId={highlight} />
+          ))}
+        {view === "chat" && <Chat onCite={jumpToSession} />}
+        {view === "papers" && <Papers />}
       </main>
 
       <footer className="statusbar">
