@@ -397,3 +397,84 @@ body {
   max-height: calc(100vh - 260px);
   overflow-y: auto;
 }
+
+/* Code */
+.code {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 24px;
+  height: calc(100vh - 150px);
+}
+.code-tree,
+.code-detail {
+  overflow-y: auto;
+}
+.section-label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.mono {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.dir-row,
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.dir-row:hover,
+.file-row:hover {
+  background: var(--panel);
+}
+.file-row.selected {
+  background: var(--panel-2);
+}
+.chevron {
+  color: var(--muted);
+  font-size: 10px;
+}
+.file-name {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.file-changes {
+  font-size: 10px;
+  color: var(--gold);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 6px;
+}
+.hist-row,
+.change-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 4px;
+  border-bottom: 1px solid rgba(58, 50, 37, 0.5);
+  cursor: pointer;
+}
+.hist-row:hover,
+.change-row:hover {
+  background: var(--panel);
+}
+.change-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--sand-dim);
+}
+.change-sum {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faience-text);
+}

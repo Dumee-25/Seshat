@@ -249,6 +249,28 @@ def create_app(
                 "content": s.get_paper_content(paper_id) or "",
             }
 
+    @app.get("/api/files")
+    def files() -> dict:
+        from seshat.query.files import build_tree, code_files, file_stats
+
+        with store() as s:
+            stats = file_stats(s)
+        return {"tree": build_tree(code_files(root, config), stats)}
+
+    @app.get("/api/files/changes")
+    def file_changes(limit: int = 30) -> dict:
+        from seshat.query.files import recent_changes
+
+        with store() as s:
+            return {"changes": recent_changes(s, limit=limit)}
+
+    @app.get("/api/files/history")
+    def file_history(path: str) -> dict:
+        from seshat.query.files import file_history as history
+
+        with store() as s:
+            return {"path": path, "sessions": history(s, path)}
+
     @app.post("/api/links")
     def add_link(req: LinkRequest) -> dict:
         from seshat.papers.ingest import PaperIngestError

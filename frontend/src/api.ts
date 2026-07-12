@@ -106,3 +106,37 @@ export async function addLink(url: string): Promise<PaperListItem> {
   }
   return res.json() as Promise<PaperListItem>;
 }
+
+export interface FileNode {
+  name: string;
+  path: string;
+  type: "file" | "dir";
+  changes?: number;
+  last_changed?: string | null;
+  children?: FileNode[];
+}
+
+export interface FileChange {
+  path: string;
+  kind: string;
+  ts: string;
+  session_id: number | null;
+  summary: string;
+}
+
+export interface FileHistoryItem {
+  session_id: number;
+  started_at: string;
+  what_changed: string | null;
+}
+
+export const getFiles = () =>
+  getJSON<{ tree: FileNode[] }>("/api/files").then((r) => r.tree);
+
+export const getFileChanges = () =>
+  getJSON<{ changes: FileChange[] }>("/api/files/changes").then((r) => r.changes);
+
+export const getFileHistory = (path: string) =>
+  getJSON<{ sessions: FileHistoryItem[] }>(
+    `/api/files/history?path=${encodeURIComponent(path)}`,
+  ).then((r) => r.sessions);
