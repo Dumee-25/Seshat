@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { getStatus, getTimeline, type Status, type TimelineItem } from "./api";
+import { Chat } from "./Chat";
 import { Timeline } from "./Timeline";
+
+type View = "timeline" | "chat";
 
 const STAR = (
   <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden>
@@ -24,7 +27,7 @@ const STAR = (
 
 const PLACES = [
   { id: "timeline", label: "Timeline", ready: true },
-  { id: "chat", label: "Chat", ready: false },
+  { id: "chat", label: "Chat", ready: true },
   { id: "papers", label: "Papers & links", ready: false },
   { id: "code", label: "Code", ready: false },
   { id: "data", label: "Data", ready: false },
@@ -34,6 +37,13 @@ export function App() {
   const [status, setStatus] = useState<Status | null>(null);
   const [items, setItems] = useState<TimelineItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<View>("timeline");
+  const [highlight, setHighlight] = useState<number | null>(null);
+
+  const jumpToSession = (sessionId: number) => {
+    setHighlight(sessionId);
+    setView("timeline");
+  };
 
   useEffect(() => {
     let alive = true;
@@ -67,7 +77,10 @@ export function App() {
         {PLACES.map((p) => (
           <div
             key={p.id}
-            className={`nav-item ${p.id === "timeline" ? "active" : "disabled"}`}
+            className={`nav-item ${
+              !p.ready ? "disabled" : view === p.id ? "active" : ""
+            }`}
+            onClick={() => p.ready && setView(p.id as View)}
           >
             <span>{p.label}</span>
             {!p.ready && <span className="nav-soon">soon</span>}
@@ -76,18 +89,32 @@ export function App() {
       </aside>
 
       <main className="main">
-        <h1 className="view-title">Timeline</h1>
-        <div className="view-sub">
-          {status ? status.project : "…"} · everything that has happened
-        </div>
-        {error ? (
-          <div className="empty">
-            Can't reach the Seshat API. Is the cockpit server running?
-            <br />
-            <span style={{ fontFamily: "var(--mono)", fontSize: 12 }}>{error}</span>
-          </div>
+        {view === "timeline" ? (
+          <>
+            <h1 className="view-title">Timeline</h1>
+            <div className="view-sub">
+              {status ? status.project : "…"} · everything that has happened
+            </div>
+            {error ? (
+              <div className="empty">
+                Can't reach the Seshat API. Is the cockpit server running?
+                <br />
+                <span style={{ fontFamily: "var(--mono)", fontSize: 12 }}>
+                  {error}
+                </span>
+              </div>
+            ) : (
+              <Timeline items={items} highlightId={highlight} />
+            )}
+          </>
         ) : (
-          <Timeline items={items} />
+          <>
+            <h1 className="view-title">Chat</h1>
+            <div className="view-sub">
+              {status ? status.project : "…"} · ask across everything
+            </div>
+            <Chat onCite={jumpToSession} />
+          </>
         )}
       </main>
 

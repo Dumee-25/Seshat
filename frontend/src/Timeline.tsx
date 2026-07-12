@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { TimelineItem } from "./api";
 
 const MARKER: Record<string, string> = {
@@ -31,7 +32,21 @@ function IntentBadge({ item }: { item: TimelineItem }) {
   return <span className={`badge ${status}`}>{label}</span>;
 }
 
-export function Timeline({ items }: { items: TimelineItem[] }) {
+export function Timeline({
+  items,
+  highlightId,
+}: {
+  items: TimelineItem[];
+  highlightId?: number | null;
+}) {
+  useEffect(() => {
+    if (highlightId != null) {
+      document
+        .getElementById(`tl-session-${highlightId}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlightId, items]);
+
   if (items.length === 0) {
     return (
       <div className="empty">
@@ -42,10 +57,14 @@ export function Timeline({ items }: { items: TimelineItem[] }) {
   }
   return (
     <div className="feed">
-      {items.map((item) => (
+      {items.map((item) => {
+        const highlighted =
+          item.kind === "session" && item.id === highlightId;
+        return (
         <div
           key={`${item.kind}-${item.id}`}
-          className="row"
+          id={item.kind === "session" ? `tl-session-${item.id}` : undefined}
+          className={`row${highlighted ? " highlighted" : ""}`}
           style={{ ["--marker" as string]: MARKER[item.kind] }}
         >
           <div className="row-head">
@@ -56,7 +75,8 @@ export function Timeline({ items }: { items: TimelineItem[] }) {
           <div className="row-title">{item.title}</div>
           {item.subtitle && <div className="row-sub">{item.subtitle}</div>}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
