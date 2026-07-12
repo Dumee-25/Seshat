@@ -214,6 +214,15 @@ class Paper:
 
 
 @dataclass
+class Artifact:
+    path: str
+    kind: str
+    created_at: str | None = None
+    meta: dict = field(default_factory=dict)
+    id: int | None = None
+
+
+@dataclass
 class Edge:
     src_type: str
     src_id: int

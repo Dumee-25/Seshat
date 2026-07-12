@@ -278,6 +278,83 @@ def app() -> None:
 
 
 @main.command()
+@click.option("--port", default=8765, help="Port for the cockpit API.")
+@click.option("--no-window", is_flag=True,
+              help="Serve the API only (pair with `npm run dev` in frontend/).")
+def cockpit(port: int, no_window: bool) -> None:
+    """Launch the research cockpit: a workspace over your whole project
+    (experimental; the React frontend must be built or running in dev)."""
+    import importlib.util
+
+    from seshat.app.userconfig import resolve_project, set_default_project
+    from seshat.config import load_config
+
+    for pkg in ("fastapi", "uvicorn"):
+        if importlib.util.find_spec(pkg) is None:
+            raise click.ClickException(
+                "The cockpit needs FastAPI. Install `pip install \"seshat[cockpit]\"`."
+            )
+    root = resolve_project()
+    if root is None:
+        raise click.ClickException(
+            "No Seshat project to open. Run `seshat init` in your project first."
+        )
+    try:
+        config = load_config(root)
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+    set_default_project(root)
+
+    from seshat.api.server import ApiServer
+
+    server = ApiServer(root, config, port)
+    server.start()
+    if not server.wait_until_ready():
+        raise click.ClickException("The cockpit API failed to start.")
+    click.echo(f"Cockpit API on {server.url}")
+
+    if no_window:
+        click.echo(
+            "Serving API only. In frontend/: `npm run dev`, then open "
+            "http://localhost:5173  (Ctrl+C to stop)."
+        )
+        import time
+
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            server.stop()
+        return
+
+    if importlib.util.find_spec("webview") is None:
+        server.stop()
+        raise click.ClickException(
+            "Windowed mode needs the desktop extra (`pip install \"seshat[desktop]\"`), "
+            "or use --no-window with the Vite dev server."
+        )
+    from seshat.api.app import STATIC_DIR
+
+    if not STATIC_DIR.exists():
+        server.stop()
+        raise click.ClickException(
+            "The frontend isn't built. Run `npm run build` in frontend/, "
+            "or use --no-window with the Vite dev server."
+        )
+    import subprocess
+
+    from seshat.app.launch import window_command
+
+    proc = subprocess.Popen(window_command(server.url, "Seshat"))
+    try:
+        proc.wait()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.stop()
+
+
+@main.command()
 @click.option("--no-pull", is_flag=True, help="Report missing models but don't pull them.")
 def setup(no_pull: bool) -> None:
     """Check Ollama and pull the models Seshat needs."""
