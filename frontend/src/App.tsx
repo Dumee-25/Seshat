@@ -2,16 +2,18 @@ import { useEffect, useState } from "react";
 import { getStatus, getTimeline, type Status, type TimelineItem } from "./api";
 import { Chat } from "./Chat";
 import { Code } from "./Code";
+import { Data } from "./Data";
 import { Papers } from "./Papers";
 import { Timeline } from "./Timeline";
 
-type View = "timeline" | "chat" | "papers" | "code";
+type View = "timeline" | "chat" | "papers" | "code" | "data";
 
 const TITLES: Record<View, [string, string]> = {
   timeline: ["Timeline", "everything that has happened"],
   chat: ["Chat", "ask across everything"],
   papers: ["Papers & links", "your reading, searchable"],
   code: ["Code", "files and their change history"],
+  data: ["Data", "results and datasets"],
 };
 
 const STAR = (
@@ -39,7 +41,7 @@ const PLACES = [
   { id: "chat", label: "Chat", ready: true },
   { id: "papers", label: "Papers & links", ready: true },
   { id: "code", label: "Code", ready: true },
-  { id: "data", label: "Data", ready: false },
+  { id: "data", label: "Data", ready: true },
 ];
 
 export function App() {
@@ -117,6 +119,7 @@ export function App() {
         {view === "chat" && <Chat onCite={jumpToSession} />}
         {view === "papers" && <Papers />}
         {view === "code" && <Code onCite={jumpToSession} />}
+        {view === "data" && <Data onCite={jumpToSession} />}
       </main>
 
       <footer className="statusbar">

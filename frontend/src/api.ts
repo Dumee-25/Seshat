@@ -140,3 +140,30 @@ export const getFileHistory = (path: string) =>
   getJSON<{ sessions: FileHistoryItem[] }>(
     `/api/files/history?path=${encodeURIComponent(path)}`,
   ).then((r) => r.sessions);
+
+export interface Artifact {
+  id: number;
+  path: string;
+  name: string;
+  kind: string;
+  created_at: string | null;
+}
+
+export interface DataPreview {
+  kind: "csv" | "json" | "text" | "missing";
+  columns?: string[];
+  rows?: string[][];
+  text?: string;
+  truncated?: boolean;
+}
+
+export interface DataDetail {
+  artifact: { id: number; path: string; kind: string; created_at: string | null };
+  preview: DataPreview;
+  sessions: FileHistoryItem[];
+}
+
+export const getArtifacts = () =>
+  getJSON<{ artifacts: Artifact[] }>("/api/data").then((r) => r.artifacts);
+
+export const getArtifact = (id: number) => getJSON<DataDetail>(`/api/data/${id}`);
