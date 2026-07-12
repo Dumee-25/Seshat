@@ -292,3 +292,108 @@ body {
   opacity: 0.5;
   cursor: default;
 }
+
+/* Papers & links */
+.addbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.addbar input {
+  flex: 1;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: var(--sand);
+  font-family: var(--sans);
+  font-size: 14px;
+}
+.addbar input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+.addbar button {
+  background: var(--gold);
+  color: var(--kohl);
+  border: none;
+  border-radius: 8px;
+  padding: 0 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.paper-list {
+  display: flex;
+  flex-direction: column;
+}
+.paper-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 4px;
+  border-bottom: 1px solid rgba(58, 50, 37, 0.5);
+  cursor: pointer;
+}
+.paper-row:hover {
+  background: var(--panel);
+}
+.paper-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.paper-date {
+  color: var(--muted);
+  font-size: 12px;
+}
+.src {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.src.url {
+  border-color: var(--faience);
+  color: var(--faience-text);
+}
+.src.pdf {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.reader .back {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  margin-bottom: 16px;
+}
+.reader-title {
+  font-family: var(--serif);
+  font-size: 22px;
+  margin: 0 0 6px;
+}
+.reader-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+.reader-meta a {
+  color: var(--faience-text);
+}
+.reader-body {
+  white-space: pre-wrap;
+  line-height: 1.7;
+  color: var(--sand-dim);
+  max-width: 760px;
+  max-height: calc(100vh - 260px);
+  overflow-y: auto;
+}

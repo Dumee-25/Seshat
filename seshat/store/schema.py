@@ -157,6 +157,15 @@ MIGRATIONS: list[str] = [
         cleared INTEGER NOT NULL DEFAULT 0
     );
     """,
+    # v6: full extracted text of papers and links, kept so the cockpit's
+    # reader can show the whole document. The vector store only holds chunks;
+    # this holds the source text, separate from the papers row.
+    """
+    CREATE TABLE paper_content (
+        paper_id INTEGER PRIMARY KEY REFERENCES papers(id),
+        text TEXT NOT NULL
+    );
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)
@@ -210,6 +219,7 @@ class Paper:
     path: str
     title: str | None = None
     added_at: str | None = None
+    meta: dict = field(default_factory=dict)
     id: int | None = None
 
 
