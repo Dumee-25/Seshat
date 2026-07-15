@@ -6,10 +6,18 @@ the Python package. Everything here runs on Windows; there is no cross-compile.
 ## Prerequisites
 
 - Windows 10/11 with the [WebView2 runtime](https://developer.microsoft.com/microsoft-edge/webview2/) (preinstalled on Windows 11).
-- A Python 3.11+ environment with the app and build tools installed:
+- A **clean, dedicated** Python 3.11+ virtual environment with the app and build
+  tools installed, activated so that `python` resolves to it:
   ```
+  python -m venv .venv-build
+  .venv-build\Scripts\activate
   python -m pip install -e ".[desktop]" pyinstaller
   ```
+  Do not build from a base Anaconda/conda environment or any other fat, shared
+  interpreter. PyInstaller bundles what it can reach from the build environment,
+  so building out of Anaconda base drags jupyterlab, bokeh, scipy, and the rest
+  of the scientific stack into the analysis — the build crawls and the bundle
+  bloats. A dedicated venv holds ~38 packages and freezes in about a minute.
 - [Node.js](https://nodejs.org) on PATH, to build the React cockpit that gets bundled into the exe.
 - [Inno Setup 6](https://jrsoftware.org/isinfo.php) for the installer (optional; the onedir app builds without it).
 - [Ollama](https://ollama.com) is a runtime dependency, not bundled. The app's first-run `seshat setup` detects it and pulls the models.
@@ -26,8 +34,12 @@ if that static bundle is missing, so the exe can never ship a backend with no
 UI. The build output is not committed; it is produced fresh on every build.
 
 Outputs:
-- `dist\Seshat\Seshat.exe` — the standalone app (a folder; ship the whole folder).
+- `dist\Seshat\Seshat.exe` — the standalone app (a folder; ship the whole folder). Around 94 MB.
 - `dist\SeshatSetup.exe` — the installer (if Inno Setup is present).
+
+First launch is slow — roughly 20-25 seconds before the window appears, while
+Windows unpacks and virus-scans the bundle for the first time. Later launches
+are quick. Give it that long before concluding a build is broken.
 
 ## How the frozen app works
 
