@@ -4,12 +4,13 @@ Threading model (chosen to avoid two GUI event loops fighting for the main
 thread):
   - main thread runs the tray icon's message loop (`icon.run()`);
   - the file watcher runs on a daemon thread (WatcherSupervisor);
-  - the Streamlit server runs as a child process;
+  - the cockpit API runs on a daemon thread (ApiServer);
   - each UI window is its own child process (seshat.app.window).
 
 The store is opened twice on purpose: the watcher thread writes through one
 connection, the tray thread reads status through another. Separate connections
-+ WAL keep those two threads from sharing a cursor.
++ WAL keep those two threads from sharing a cursor. The API opens its own
+connection per request, so it needs no share of either.
 """
 
 from __future__ import annotations
@@ -18,8 +19,8 @@ import subprocess
 import threading
 from pathlib import Path
 
+from seshat.api.server import ApiServer
 from seshat.app.launch import window_command
-from seshat.app.server import StreamlitServer
 from seshat.app.supervisor import WatcherSupervisor
 from seshat.config import SeshatConfig
 from seshat.store.db import Store
@@ -51,7 +52,7 @@ class DesktopApp:
             background_task=worker.run_pending, vectors=self._vectors,
         )
         self._supervisor = WatcherSupervisor(service, self._status_store, log=log)
-        self._server = StreamlitServer(self._root)
+        self._server = ApiServer(self._root, config)
         self._icon = None
 
     # -- TrayController interface ---------------------------------------------
@@ -66,7 +67,7 @@ class DesktopApp:
         if self._server.wait_until_ready():
             subprocess.Popen(window_command(self._server.url, "Seshat"))
         else:
-            self._log("UI server did not become ready in time.")
+            self._log("The cockpit API did not become ready in time.")
 
     def status_label(self) -> str:
         return self._supervisor.status().label()

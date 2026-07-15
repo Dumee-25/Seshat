@@ -46,7 +46,7 @@ Roughly 70% of the backbone already exists. The bulk of the work is UI plus one 
 
 ## 5. Architecture
 
-The cockpit is the React frontend the earlier phases were building toward. The desktop shell (pywebview + tray + watcher + installer) from Phases A–C is the container; only the *contents* of the window change from Streamlit to React.
+The cockpit is the React frontend the earlier phases were building toward. The desktop shell (pywebview + tray + watcher + installer) from Phases A–C is the container; only the *contents* of the window changed from Streamlit to React. As of phase 6 that swap is complete: the Streamlit UI is gone, and `seshat app` serves the cockpit.
 
 ```
 pywebview window  ─►  React app (Vite build)  ◄─►  FastAPI  ─►  Store / QueryEngine / VectorStore
@@ -54,26 +54,40 @@ pywebview window  ─►  React app (Vite build)  ◄─►  FastAPI  ─►  St
    system tray  ◄──────────────  WatchService (background thread) ─────┘
 ```
 
-- **FastAPI** — a thin HTTP layer over the *existing* store and query engine. It adds no new intelligence; it exposes what is already there. Runs on localhost.
-- **React + Vite + TypeScript + Tailwind** — the workspace. The "kohl" theme carries over. Components are hand-rolled (the surface count is small); a pdf.js-based reader for papers.
+- **FastAPI** — a thin HTTP layer over the *existing* store and query engine. It adds no new intelligence; it exposes what is already there. Runs on localhost, on a background thread inside the app process.
+- **React + Vite + TypeScript** — the workspace. The "kohl" theme carries over. Components are hand-rolled and the CSS is hand-written (the surface count is small; Tailwind was not worth the build step).
 - **pywebview** — in development the window points at the Vite dev server; in a build, FastAPI serves the compiled static files and the window points at FastAPI.
 
-### API surface (first cut)
+### API surface
+
+Built, as of phase 6:
 
 ```
-GET  /api/status                     watcher state, queued count (polled/streamed)
+GET  /api/health                     liveness, for the window's readiness probe
+GET  /api/status                     watcher state, queued count (polled)
 GET  /api/timeline?since=&kinds=     merged activity feed
 GET  /api/sessions/{id}              session detail + raw events
 POST /api/chat                       question -> cited answer
+GET  /api/chat/history               persisted conversation
+POST /api/chat/clear                 forget the conversation
 GET  /api/papers                     ingested papers + links
+GET  /api/papers/{id}                reader content
 POST /api/links                      ingest a URL
-GET  /api/papers/{id}                chunks / reader content
 GET  /api/files                      project file tree
 GET  /api/files/changes              recent changes, linked to sessions
-GET  /api/data                       results/artifacts + preview
+GET  /api/files/history?path=        one file's change history
+GET  /api/data                       results/artifacts
+GET  /api/data/{id}                  artifact preview + producing sessions
 POST /api/entries/{id}/intent        confirm / correct an inferred intent
+```
+
+Still deferred:
+
+```
 GET  /api/events/stream              server-sent events for the live tail
 ```
+
+The live tail is a 5-second poll of `/api/timeline` for now. It is good enough that SSE has not earned its plumbing yet; new rows flash in on arrival either way.
 
 ### What is reused unchanged
 
@@ -87,21 +101,21 @@ The cockpit implies "start / open a project." A light version is in scope: a fol
 
 Highest reuse and value first, so the cockpit feels real early.
 
-1. **Shell + timeline.** FastAPI skeleton, React/Vite/Tailwind app inside the pywebview window, the merged timeline endpoint and view, and live status. This forces the whole stack into place and delivers the spine.
-2. **Chat over everything.** Bring the query engine into the workspace; citations jump into the timeline.
-3. **Papers & links.** Reader for PDFs plus URL ingestion.
-4. **Code panel.** File tree + recent changes linked to sessions.
-5. **Data panel.** Results/artifact preview and tracking.
-6. **Package & retire Streamlit.** Update the PyInstaller spec to bundle FastAPI + the built React app; rebuild the installer. Remove the Streamlit UI.
+1. ~~**Shell + timeline.**~~ *Done.* FastAPI skeleton, React/Vite app inside the pywebview window, the merged timeline endpoint and view, and live status. This forces the whole stack into place and delivers the spine.
+2. ~~**Chat over everything.**~~ *Done.* Bring the query engine into the workspace; citations jump into the timeline.
+3. ~~**Papers & links.**~~ *Done.* Reader for PDFs plus URL ingestion.
+4. ~~**Code panel.**~~ *Done.* File tree + recent changes linked to sessions.
+5. ~~**Data panel.**~~ *Done.* Results/artifact preview and tracking.
+6. ~~**Package & retire Streamlit.**~~ *Done.* The build script builds the React app and the PyInstaller spec bundles it beside FastAPI; the spec refuses to freeze without it. `seshat app` now serves the cockpit, and `seshat ui`, `seshat/ui/`, the Streamlit server, and the `ui` extra are gone. Intent confirm/correct — the one thing Streamlit could do that the cockpit could not — moved to `POST /api/entries/{id}/intent` and into the timeline rows first, so nothing was lost in the swap.
 
-Each phase ships behind the same PR-per-phase, CI-green rhythm as the rest of the project. The Streamlit UI keeps working until step 6, so the tool is never broken mid-build.
+Each phase ships behind the same PR-per-phase, CI-green rhythm as the rest of the project. The Streamlit UI kept working until step 6, so the tool was never broken mid-build.
 
 ## 8. Honest hard parts
 
-- **Two-language build.** Bundling a built React app into the frozen exe (step 6) is the fiddly part; mitigated by building the static assets in CI or committing them.
+- **Two-language build.** *Settled.* `build.ps1` builds the static assets before freezing rather than committing them, and the spec hard-fails if they are missing — the failure mode this risked (shipping a backend with no UI) is now a build error, not a blank window. The cost is that the build box needs Node.
 - **Scope discipline on the frontend.** A React app invites sprawl. The fixed surface list above is the whole v1 — no editor, no settings pages, no dashboards beyond the five surfaces.
 - **Link extraction.** Web content is messy; some sites block fetching. Start simple, accept imperfection, improve from real use.
-- **Live tail.** Server-sent events add modest plumbing across FastAPI, the store, and React.
+- **Live tail.** *Deferred.* A 5-second poll turned out to be enough; SSE's plumbing across FastAPI, the store, and React has not paid for itself yet.
 - **It is the biggest rock yet.** The backbone exists, but a real frontend codebase is the largest new surface the project has taken on. It is a multi-phase build, not a weekend.
 
 ## 9. Still deferred

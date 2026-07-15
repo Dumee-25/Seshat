@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getStatus, getTimeline, type Status, type TimelineItem } from "./api";
 import { Chat } from "./Chat";
 import { Code } from "./Code";
 import { Data } from "./Data";
+import { ICONS, Star } from "./icons";
 import { Papers } from "./Papers";
 import { Timeline } from "./Timeline";
 
@@ -16,33 +17,26 @@ const TITLES: Record<View, [string, string]> = {
   data: ["Data", "results and datasets"],
 };
 
-const STAR = (
-  <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden>
-    <g stroke="var(--gold)" strokeWidth="1.4" strokeLinecap="round">
-      {Array.from({ length: 7 }).map((_, i) => {
-        const a = -Math.PI / 2 + (i * 2 * Math.PI) / 7;
-        return (
-          <line
-            key={i}
-            x1="10"
-            y1="10"
-            x2={(10 + 7.5 * Math.cos(a)).toFixed(1)}
-            y2={(10 + 7.5 * Math.sin(a)).toFixed(1)}
-          />
-        );
-      })}
-    </g>
-    <circle cx="10" cy="10" r="2" fill="var(--gold)" />
-  </svg>
-);
+const PLACES: View[] = ["timeline", "chat", "papers", "code", "data"];
 
-const PLACES = [
-  { id: "timeline", label: "Timeline", ready: true },
-  { id: "chat", label: "Chat", ready: true },
-  { id: "papers", label: "Papers & links", ready: true },
-  { id: "code", label: "Code", ready: true },
-  { id: "data", label: "Data", ready: true },
-];
+// Chat and Code manage their own internal scrolling; the rest scroll as a page.
+const SELF_SCROLLING: View[] = ["chat", "code"];
+
+const SKELETON_WIDTHS = [90, 72, 84, 60];
+
+function Skeleton() {
+  return (
+    <div className="skeleton">
+      {SKELETON_WIDTHS.map((w, i) => (
+        <div
+          key={i}
+          className="skeleton-bar"
+          style={{ width: `${w}%`, animationDelay: `${i * 0.12}s` }}
+        />
+      ))}
+    </div>
+  );
+}
 
 export function App() {
   const [status, setStatus] = useState<Status | null>(null);
@@ -50,10 +44,22 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("timeline");
   const [highlight, setHighlight] = useState<number | null>(null);
+  // Held until the first poll resolves, so the skeleton stands in for the feed
+  // rather than a flash of "nothing recorded yet".
+  const [booting, setBooting] = useState(true);
+  // Flips each view change so the enter animation restarts even when React
+  // reuses the wrapper element.
+  const [viewChanges, setViewChanges] = useState(0);
+  const refresh = useRef<() => void>(() => {});
+
+  const show = (next: View) => {
+    setView(next);
+    setViewChanges((n) => n + 1);
+  };
 
   const jumpToSession = (sessionId: number) => {
     setHighlight(sessionId);
-    setView("timeline");
+    show("timeline");
   };
 
   useEffect(() => {
@@ -61,15 +67,17 @@ export function App() {
     const tick = async () => {
       try {
         const [s, t] = await Promise.all([getStatus(), getTimeline()]);
-        if (alive) {
-          setStatus(s);
-          setItems(t);
-          setError(null);
-        }
+        if (!alive) return;
+        setStatus(s);
+        setItems(t);
+        setError(null);
       } catch (e) {
         if (alive) setError(String(e));
+      } finally {
+        if (alive) setBooting(false);
       }
     };
+    refresh.current = tick;
     tick();
     const id = setInterval(tick, 5000); // simple live tail; SSE comes later
     return () => {
@@ -78,49 +86,71 @@ export function App() {
     };
   }, []);
 
+  const scrolls = !SELF_SCROLLING.includes(view);
+
   return (
     <div className="app">
-      <aside className="sidebar">
-        <div className="brand">
-          {STAR}
-          <span className="wordmark">SESHAT</span>
-        </div>
-        {PLACES.map((p) => (
-          <div
-            key={p.id}
-            className={`nav-item ${
-              !p.ready ? "disabled" : view === p.id ? "active" : ""
-            }`}
-            onClick={() => p.ready && setView(p.id as View)}
-          >
-            <span>{p.label}</span>
-            {!p.ready && <span className="nav-soon">soon</span>}
+      <div className="app-body">
+        <aside className="sidebar">
+          <div className="brand">
+            <Star />
+            <span className="wordmark">SESHAT</span>
           </div>
-        ))}
-      </aside>
+          {PLACES.map((id) => {
+            const Icon = ICONS[id];
+            return (
+              <div
+                key={id}
+                className={`nav-item${view === id ? " active" : ""}`}
+                onClick={() => show(id)}
+                title={TITLES[id][0]}
+              >
+                <span className="nav-icon">
+                  <Icon />
+                </span>
+                <span>{TITLES[id][0]}</span>
+              </div>
+            );
+          })}
+        </aside>
 
-      <main className="main">
-        <h1 className="view-title">{TITLES[view][0]}</h1>
-        <div className="view-sub">
-          {status ? status.project : "…"} · {TITLES[view][1]}
-        </div>
-        {view === "timeline" &&
-          (error ? (
-            <div className="empty">
-              Can't reach the Seshat API. Is the cockpit server running?
-              <br />
-              <span style={{ fontFamily: "var(--mono)", fontSize: 12 }}>
-                {error}
-              </span>
-            </div>
-          ) : (
-            <Timeline items={items} highlightId={highlight} />
-          ))}
-        {view === "chat" && <Chat onCite={jumpToSession} />}
-        {view === "papers" && <Papers />}
-        {view === "code" && <Code onCite={jumpToSession} />}
-        {view === "data" && <Data onCite={jumpToSession} />}
-      </main>
+        <main className="main">
+          <h1 className="view-title">{TITLES[view][0]}</h1>
+          <div className="view-sub">
+            {status ? status.project : "…"} · {TITLES[view][1]}
+          </div>
+
+          <div
+            key={viewChanges}
+            className={`content${scrolls ? " scrolls" : ""}`}
+          >
+            {booting ? (
+              <Skeleton />
+            ) : (
+              <>
+                {view === "timeline" &&
+                  (error ? (
+                    <div className="empty">
+                      Can't reach the Seshat API. Is the cockpit server running?
+                      <br />
+                      <span className="mono">{error}</span>
+                    </div>
+                  ) : (
+                    <Timeline
+                      items={items}
+                      highlightId={highlight}
+                      onIntentChange={() => refresh.current()}
+                    />
+                  ))}
+                {view === "chat" && <Chat onCite={jumpToSession} />}
+                {view === "papers" && <Papers />}
+                {view === "code" && <Code onCite={jumpToSession} />}
+                {view === "data" && <Data onCite={jumpToSession} />}
+              </>
+            )}
+          </div>
+        </main>
+      </div>
 
       <footer className="statusbar">
         <span>

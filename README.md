@@ -24,7 +24,7 @@ Seshat is a pipeline of four layers, each feeding the next:
 
 3. **Paper linkage.** PDFs dropped into the papers folder are extracted, chunked, and embedded into the same vector store. A paper added within roughly a week before a session is linked to it with a low-confidence edge, and its most relevant passages are provided to the journal model -- connecting what you read to what you changed.
 
-4. **Query.** `seshat ui` opens a chat over the whole history. Retrieval is hybrid: vector search over journal entries and paper chunks combined with structured filters (file path, date range). Every answer cites the sessions it draws on, and each citation expands to the underlying diffs and outputs, so trust never rests on the model's word alone.
+4. **Query.** `seshat cockpit` opens a chat over the whole history. Retrieval is hybrid: vector search over journal entries and paper chunks combined with structured filters (file path, date range). Every answer cites the sessions it draws on, and each citation expands to the underlying diffs and outputs, so trust never rests on the model's word alone.
 
 Everything runs locally and in a single SQLite file: the store, the graph, and the vector index (via `sqlite-vec`) all live in one `.seshat/seshat.sqlite3`. Ollama serves both generation and embeddings, so there is no heavyweight ML runtime to install. Nothing leaves the machine, including telemetry. Users who prefer quality over privacy can point the provider at any OpenAI-compatible API instead.
 
@@ -33,17 +33,19 @@ Everything runs locally and in a single SQLite file: the store, the graph, and t
 Requires Python 3.11+. Seshat is not on PyPI yet; install it straight from this repository:
 
 ```
-python -m pip install "seshat[ui] @ git+https://github.com/Dumee-25/Seshat.git"
+python -m pip install "seshat[cockpit] @ git+https://github.com/Dumee-25/Seshat.git"
 ```
 
 Or, from a local clone (editable, so updates apply without reinstalling):
 
 ```
 git clone https://github.com/Dumee-25/Seshat.git
-python -m pip install -e "Seshat[ui]"
+python -m pip install -e "Seshat[cockpit]"
 ```
 
-The `ui` extra pulls Streamlit for the chat interface; without it you get capture and the CLI. Add the `desktop` extra (`seshat[ui,desktop]`) for the native desktop app. There is no separate embeddings extra — embeddings run through Ollama.
+The `cockpit` extra pulls FastAPI for the workspace; without it you get capture and the CLI. Add the `desktop` extra (`seshat[desktop]`, which includes `cockpit`) for the native desktop app. There is no separate embeddings extra — embeddings run through Ollama.
+
+The cockpit's React frontend is built from `frontend/` (`npm ci && npm run build`); a packaged install ships it prebuilt.
 
 For generation and search, install [Ollama](https://ollama.com) and pull both models:
 
@@ -68,7 +70,7 @@ seshat watch           # start capturing (leave running while you work)
 Then, in a second terminal whenever you want answers:
 
 ```
-seshat ui              # chat + timeline in the browser
+seshat cockpit         # the workspace: timeline, chat, papers, code, data
 ```
 
 Journal entries are generated in the background while `seshat watch` runs, or on demand with `seshat process`.
@@ -98,7 +100,7 @@ To build a double-click Windows installer (`SeshatSetup.exe`) from source, see [
 | `seshat install-hooks` | Install the post-commit hook that records commits. |
 | `seshat process` | Generate journal entries for all queued sessions. `--force` ignores the GPU-idle check. |
 | `seshat reprocess` | Regenerate entries from raw events after a model or prompt upgrade. |
-| `seshat ui` | Open the chat and timeline interface. |
+| `seshat cockpit` | Open the research cockpit (timeline, chat, papers, code, data). `--no-window` serves the API only, for frontend development. |
 | `seshat eval` | Measure retrieval and answer accuracy against a ground-truth question set (see `eval/questions.example.json`). |
 | `seshat audit` | Label a sample of inferred intents correct/partial/wrong; tracks intent accuracy over time. |
 | `seshat stats` | Capture counts, intent-status breakdown, audit rates, and queries per week. |

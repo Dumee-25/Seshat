@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500&family=JetBrains+Mono&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
 
 :root {
   --kohl: #16130f;
@@ -32,22 +32,68 @@ body {
   color: var(--sand);
   font-family: var(--sans);
   font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes flash {
+  from {
+    background: rgba(201, 162, 39, 0.25);
+  }
+  to {
+    background: transparent;
+  }
 }
 
 .app {
-  display: grid;
-  grid-template-columns: 190px 1fr;
-  grid-template-rows: 1fr auto;
+  display: flex;
+  flex-direction: column;
   height: 100vh;
+  overflow: hidden;
+}
+.app-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
 }
 
 .sidebar {
-  grid-row: 1 / 3;
+  flex-shrink: 0;
+  width: 200px;
   border-right: 1px solid var(--border);
   padding: 16px 12px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  overflow-y: auto;
 }
 .brand {
   display: flex;
@@ -63,36 +109,66 @@ body {
 .nav-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 10px;
+  gap: 10px;
+  padding: 9px 10px;
   border-radius: 8px;
   color: var(--sand-dim);
   cursor: pointer;
   user-select: none;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 .nav-item.active {
-  background: var(--panel);
+  background: var(--panel-2);
   color: var(--sand);
 }
-.nav-item.disabled {
+.nav-icon {
+  display: inline-flex;
   color: var(--muted);
-  cursor: default;
+  transition: color 0.15s ease;
 }
-.nav-soon {
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-  text-transform: uppercase;
+.nav-item.active .nav-icon {
+  color: var(--gold);
 }
 
 .main {
-  overflow-y: auto;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
   padding: 22px 28px;
+  display: flex;
+  flex-direction: column;
+}
+.content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  animation: enter 0.28s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.content.scrolls {
+  overflow-y: auto;
+  padding-right: 10px;
 }
 .view-title {
   font-family: var(--serif);
   font-size: 22px;
   margin: 0 0 2px;
+  font-weight: 500;
+}
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 4px;
+}
+.skeleton-bar {
+  height: 44px;
+  border-radius: 8px;
+  background: var(--panel);
+  animation: pulse 1.3s ease-in-out infinite;
 }
 .view-sub {
   color: var(--muted);
@@ -107,10 +183,27 @@ body {
   margin-left: 6px;
   padding-left: 0;
 }
+.day-head {
+  position: sticky;
+  top: -1px;
+  background: var(--kohl);
+  padding: 10px 0 6px 22px;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  z-index: 1;
+}
 .row {
   position: relative;
   padding: 12px 0 12px 22px;
   border-bottom: 1px solid rgba(58, 50, 37, 0.5);
+  animation: row-in 0.3s ease-out both;
+}
+.row.flashing {
+  animation:
+    row-in 0.3s ease-out both,
+    flash 1.4s ease-out;
 }
 .row::before {
   content: "";
@@ -126,6 +219,7 @@ body {
   display: flex;
   align-items: baseline;
   gap: 10px;
+  flex-wrap: wrap;
 }
 .row-kind {
   font-size: 10px;
@@ -137,16 +231,99 @@ body {
   font-size: 11px;
   color: var(--muted);
   margin-left: auto;
+  white-space: nowrap;
 }
 .row-title {
   margin: 4px 0 2px;
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: 15.5px;
   line-height: 1.4;
+  color: var(--sand);
 }
 .row-sub {
   color: var(--sand-dim);
   font-size: 13px;
+  line-height: 1.4;
+}
+.row-why {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+/* Inline intent confirm / correct — the cockpit's one write-back. */
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.link-btn.confirm {
+  color: var(--faience-text);
+}
+.link-btn:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.link-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.intent-editor {
+  flex-basis: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.intent-editor textarea {
+  width: 100%;
+  min-height: 56px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--sand);
+  font-family: var(--sans);
+  font-size: 13px;
+  resize: vertical;
+}
+.intent-editor textarea:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+.intent-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.intent-actions button {
+  border-radius: 6px;
+  padding: 5px 14px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.intent-actions .primary {
+  background: var(--gold);
+  color: var(--kohl);
+  border: none;
+  font-weight: 500;
+}
+.intent-actions .ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.intent-actions button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.intent-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 .badge {
   font-size: 11px;
@@ -169,9 +346,11 @@ body {
   padding: 8px 28px;
   display: flex;
   gap: 18px;
+  flex-wrap: wrap;
   align-items: center;
   font-size: 12px;
   color: var(--muted);
+  flex-shrink: 0;
 }
 .dot {
   width: 8px;
@@ -180,6 +359,7 @@ body {
   background: var(--gold);
   display: inline-block;
   margin-right: 6px;
+  animation: pulse 2.4s ease-in-out infinite;
 }
 .empty {
   color: var(--muted);
@@ -200,12 +380,14 @@ body {
 .chat {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 150px);
+  height: 100%;
+  min-height: 0;
 }
 .chat-log {
   flex: 1;
   overflow-y: auto;
   padding-right: 6px;
+  min-height: 0;
 }
 .msg {
   margin-bottom: 14px;
@@ -403,7 +585,8 @@ body {
   display: grid;
   grid-template-columns: 280px 1fr;
   gap: 24px;
-  height: calc(100vh - 150px);
+  height: 100%;
+  min-height: 0;
 }
 .code-tree,
 .code-detail {

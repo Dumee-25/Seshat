@@ -1,8 +1,8 @@
 """Entry point for the bundled executable.
 
 PyInstaller points `Seshat.exe` here. Order matters:
-  1. internal sub-modes (`--seshat-run-streamlit`, `--seshat-run-window`) are
-     handled before Click ever sees argv;
+  1. internal sub-modes (`--seshat-run-window`) are handled before Click ever
+     sees argv;
   2. a bare launch (double-click, no args) becomes `seshat app`;
   3. anything else falls through to the normal CLI.
 """
