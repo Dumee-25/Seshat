@@ -106,7 +106,7 @@ Highest reuse and value first, so the cockpit feels real early.
 3. ~~**Papers & links.**~~ *Done.* Reader for PDFs plus URL ingestion.
 4. ~~**Code panel.**~~ *Done.* File tree + recent changes linked to sessions.
 5. ~~**Data panel.**~~ *Done.* Results/artifact preview and tracking.
-6. ~~**Package & retire Streamlit.**~~ *Done.* The build script builds the React app and the PyInstaller spec bundles it beside FastAPI; the spec refuses to freeze without it. `seshat app` now serves the cockpit, and `seshat ui`, `seshat/ui/`, the Streamlit server, and the `ui` extra are gone. Intent confirm/correct — the one thing Streamlit could do that the cockpit could not — moved to `POST /api/entries/{id}/intent` and into the timeline rows first, so nothing was lost in the swap.
+6. ~~**Package & retire Streamlit.**~~ *Done.* The build script builds the React app and the PyInstaller spec bundles it beside FastAPI; the spec refuses to freeze without it. `seshat app` now serves the cockpit, and `seshat ui`, `seshat/ui/`, the Streamlit server, and the `ui` extra are gone. Intent confirm/correct moved to `POST /api/entries/{id}/intent` and into the timeline rows first. One capability did not survive the swap, though — expanding an entry into its underlying diffs (§9) — because the parity check stopped at the first gap it found instead of enumerating what the old UI could do.
 
 Each phase ships behind the same PR-per-phase, CI-green rhythm as the rest of the project. The Streamlit UI kept working until step 6, so the tool was never broken mid-build.
 
@@ -120,4 +120,8 @@ Each phase ships behind the same PR-per-phase, CI-green rhythm as the rest of th
 
 ## 9. Still deferred
 
-In-app code editing and execution; multiple projects open at once; team/collaboration mode; Zotero sync; MLflow parsing; methods-section drafting; the contradiction detector. These remain out of scope for the cockpit v1.
+**Session detail — the one thing the swap to React lost.** The Streamlit UI expanded a citation, or a timeline session, into the journal entry *plus* its underlying raw events: notebook cell diffs, script diffs, commit diffs, and result previews, rendered in red/green. The cockpit does not. A citation jumps to the timeline row and stops at what Seshat wrote — you cannot get from there to the diffs it wrote it from.
+
+That is a real capability regression, and it is the one this project can least afford: "trust never rests on the model's word alone" is the argument for inferring intent at all, and checking the guess against the diff is how a reader discharges it. Everything needed is already there — `GET /api/sessions/{id}` returns the entries and the raw events with their payloads — but no component calls it. Phase 6 caught the missing intent confirm/correct before retiring Streamlit and missed this; it should be the next thing built.
+
+Genuinely out of scope for cockpit v1: in-app code editing and execution; multiple projects open at once; team/collaboration mode; Zotero sync; MLflow parsing; methods-section drafting; the contradiction detector.
