@@ -35,11 +35,13 @@ UI. The build output is not committed; it is produced fresh on every build.
 
 Outputs:
 - `dist\Seshat\Seshat.exe` — the standalone app (a folder; ship the whole folder). Around 94 MB.
-- `dist\SeshatSetup.exe` — the installer (if Inno Setup is present).
+- `dist\SeshatSetup.exe` — the installer, around 35 MB (if Inno Setup is present).
 
-First launch is slow — roughly 20-25 seconds before the window appears, while
-Windows unpacks and virus-scans the bundle for the first time. Later launches
-are quick. Give it that long before concluding a build is broken.
+The app should be on screen almost immediately: measured from a fresh install,
+the window appears about 4 seconds after launch, and about 2 seconds on later
+launches. If it takes appreciably longer than that, it is not warming up — it
+has failed. Read `%USERPROFILE%\.seshat\app.log`, since a windowed build has no
+console to print the reason to.
 
 ## How the frozen app works
 
@@ -57,15 +59,24 @@ it runs on a background thread inside the main process.
 
 ## Debugging a failed build
 
-1. In `packaging/seshat.spec`, set `console=True` and rebuild — you'll see the
+1. Read `%USERPROFILE%\.seshat\app.log` first. The shipped build is windowed
+   (`console=False`), so it has no console and everything it prints goes there.
+2. In `packaging/seshat.spec`, set `console=True` and rebuild — you'll see the
    traceback in a console window.
-2. A `ModuleNotFoundError` at runtime means a hidden import was missed: add it
+3. A `ModuleNotFoundError` at runtime means a hidden import was missed: add it
    to `hiddenimports` in the spec. uvicorn is the usual culprit, since it
    resolves its loop and protocol implementations by string at runtime.
-3. A window that opens blank means FastAPI has no static files to serve: check
+4. A window that opens blank means FastAPI has no static files to serve: check
    that `seshat/api/static/index.html` exists and that the spec's `datas` entry
    for it survived.
-4. Rebuild and repeat. Once it launches cleanly, set `console=False` again.
+5. Rebuild and repeat. Once it launches cleanly, set `console=False` again.
+
+**Test the windowed build by double-clicking it, not from a shell.** Running the
+exe with its output redirected — which is what any scripted check does — hands
+it real stdout handles that a double-click does not, and that difference has
+already hidden one crash that took the app down before its window opened (see
+`ensure_streams` in `seshat/app/entry.py`). A bug on this path reaches every
+user who launches from a shortcut, and no shell-based test will show it.
 
 ## Project selection
 
