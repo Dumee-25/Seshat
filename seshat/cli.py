@@ -218,45 +218,30 @@ def reprocess(session_id: int | None) -> None:
 
 
 @main.command()
-def ui() -> None:
-    """Open the chat + timeline interface in the browser."""
-    import importlib.util
-    import subprocess
-    import sys
-
-    from seshat.app.server import APP_SCRIPT, theme_env
-
-    _require_config()
-    if importlib.util.find_spec("streamlit") is None:
-        raise click.ClickException(
-            "streamlit is not installed. Run `pip install seshat[ui]` first."
-        )
-    subprocess.run(
-        [sys.executable, "-m", "streamlit", "run", str(APP_SCRIPT)],
-        check=False,
-        env=theme_env(),
-    )
-
-
-@main.command()
 def app() -> None:
     """Launch the Seshat desktop app: a native window plus a background,
     tray-based watcher (Ctrl+C or the tray's Quit to stop)."""
     import importlib.util
 
+    from seshat.api.app import STATIC_DIR
     from seshat.app.userconfig import resolve_project, set_default_project
     from seshat.config import load_config
 
     missing = [
         name
-        for name in ("streamlit", "webview", "pystray", "PIL")
+        for name in ("fastapi", "uvicorn", "webview", "pystray", "PIL")
         if importlib.util.find_spec(name) is None
     ]
     if missing:
         raise click.ClickException(
             "The desktop app needs extra packages "
             f"({', '.join(sorted(missing))}). Install them with "
-            "`pip install \"seshat[ui,desktop]\"`."
+            "`pip install \"seshat[desktop]\"`."
+        )
+    if not STATIC_DIR.exists():
+        raise click.ClickException(
+            "The cockpit frontend isn't built. Run `npm ci && npm run build` in "
+            "frontend/, or use `seshat cockpit --no-window` with the Vite dev server."
         )
     # An installed app is launched with no useful cwd, so fall back to the
     # remembered project. Launching from a project directory (re)sets it.

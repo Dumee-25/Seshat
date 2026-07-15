@@ -20,26 +20,22 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# The Streamlit frontend (`seshat ui`). Optional: heavy, and headless installs
-# (servers, CI) don't need it.
-# Embeddings now go through Ollama (or the configured API provider), so there
-# is no torch/sentence-transformers dependency — that is what makes Seshat
-# packageable as a desktop app.
-ui = [
-    "streamlit>=1.35",
-]
-# The native desktop shell (`seshat app`): a window (pywebview) plus a
-# system-tray watcher (pystray). Needs the `ui` extra too.
-desktop = [
-    "pywebview>=5.0",
-    "pystray>=0.19",
-    "pillow>=10.0",
-]
 # The cockpit backend (`seshat cockpit`): a FastAPI server for the React
 # workspace. The frontend is built separately (see frontend/).
+# Embeddings go through Ollama (or the configured API provider), so there is no
+# torch/sentence-transformers dependency — that is what makes Seshat packageable
+# as a desktop app.
 cockpit = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
+]
+# The native desktop shell (`seshat app`): a window (pywebview) showing the
+# cockpit, plus a system-tray watcher (pystray).
+desktop = [
+    "seshat[cockpit]",
+    "pywebview>=5.0",
+    "pystray>=0.19",
+    "pillow>=10.0",
 ]
 dev = [
     "pytest>=8.0",

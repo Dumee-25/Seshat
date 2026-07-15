@@ -37,6 +37,7 @@ def _session_item(store: Store, session) -> TimelineItem:
         subtitle = entry.observable_outcome
         meta = {
             "status": session.status,
+            "entry_id": entry.id,
             "intent": entry.inferred_intent,
             "intent_status": entry.intent_status,
             "intent_confidence": entry.intent_confidence,

@@ -26,7 +26,7 @@ def test_init_twice_fails_without_force(tmp_path: Path):
 
 def test_commands_require_config(tmp_path: Path):
     runner = CliRunner()
-    for command in ("watch", "backfill", "reprocess", "ui", "install-hooks"):
+    for command in ("watch", "backfill", "reprocess", "install-hooks"):
         with runner.isolated_filesystem(temp_dir=tmp_path):
             result = runner.invoke(main, [command])
             assert result.exit_code != 0

@@ -2,41 +2,28 @@
 no display in CI — but every non-GUI piece it relies on is."""
 
 import importlib.util
+import json
 import socket
 import threading
+import urllib.request
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
-from seshat.app.server import StreamlitServer, find_free_port, theme_env
+from seshat.api.server import ApiServer, find_free_port
 from seshat.app.supervisor import Status, WatcherSupervisor
 from seshat.cli import main
 from seshat.config import load_config, write_default_config
 from seshat.store.db import Store
 
-# -- server -------------------------------------------------------------------
+# -- server (the cockpit API the window points at) -----------------------------
 
 
-class FakePopen:
-    def __init__(self, alive: bool = True) -> None:
-        self._alive = alive
-        self.terminated = False
-        self.killed = False
-
-    def poll(self):
-        return None if self._alive else 1
-
-    def terminate(self):
-        self.terminated = True
-        self._alive = False
-
-    def wait(self, timeout=None):
-        return 0
-
-    def kill(self):
-        self.killed = True
-        self._alive = False
+@pytest.fixture
+def project(tmp_path: Path):
+    write_default_config(tmp_path)
+    return tmp_path, load_config(tmp_path)
 
 
 def test_find_free_port_is_bindable():
@@ -45,55 +32,37 @@ def test_find_free_port_is_bindable():
         sock.bind(("127.0.0.1", port))  # must not raise
 
 
-def test_theme_env_sets_defaults_but_yields_to_existing():
-    env = theme_env({"STREAMLIT_THEME_PRIMARY_COLOR": "#000000"})
-    assert env["STREAMLIT_THEME_PRIMARY_COLOR"] == "#000000"  # not overridden
-    assert env["STREAMLIT_THEME_BASE"] == "dark"  # filled in
+def test_server_takes_a_free_port_when_none_given(project):
+    root, config = project
+    server = ApiServer(root, config)
+    assert server.port > 0
+    assert server.url == f"http://localhost:{server.port}"
+    assert not server.is_running()  # constructing does not start it
 
 
-def test_command_has_streamlit_run_and_port(tmp_path: Path):
-    server = StreamlitServer(tmp_path)
-    cmd = server.command(8080)
-    assert "streamlit" in cmd and "run" in cmd
-    assert "--server.port" in cmd and "8080" in cmd
+def test_server_honours_an_explicit_port(project):
+    root, config = project
+    assert ApiServer(root, config, port=8765).port == 8765
 
 
-def test_start_uses_runner_and_reports_running(tmp_path: Path):
-    server = StreamlitServer(tmp_path)
-    server.start(runner=lambda cmd: FakePopen())
-    assert server.is_running()
-    assert server.url.startswith("http://localhost:")
-    server.start(runner=lambda cmd: FakePopen())  # idempotent, no second proc
+def test_wait_until_ready_is_false_before_start(project):
+    root, config = project
+    assert not ApiServer(root, config).wait_until_ready(timeout=0.2)
 
 
-def test_wait_until_ready_true_when_probe_passes(tmp_path: Path):
-    server = StreamlitServer(tmp_path)
-    server.start(runner=lambda cmd: FakePopen())
-    assert server.wait_until_ready(probe=lambda url: True, sleep=lambda s: None)
-
-
-def test_wait_until_ready_false_when_process_dies(tmp_path: Path):
-    server = StreamlitServer(tmp_path)
-    server.start(runner=lambda cmd: FakePopen(alive=False))
-    assert not server.wait_until_ready(
-        timeout=0.2, probe=lambda url: True, sleep=lambda s: None
-    )
-
-
-def test_wait_until_ready_times_out(tmp_path: Path):
-    server = StreamlitServer(tmp_path)
-    server.start(runner=lambda cmd: FakePopen())
-    assert not server.wait_until_ready(
-        timeout=0.05, probe=lambda url: False, sleep=lambda s: None
-    )
-
-
-def test_stop_terminates(tmp_path: Path):
-    server = StreamlitServer(tmp_path)
-    proc = FakePopen()
-    server.start(runner=lambda cmd: proc)
-    server.stop()
-    assert proc.terminated
+def test_server_serves_the_api_then_stops(project):
+    """The one end-to-end check that the desktop app's window will have
+    something to load: start the real server, hit it over HTTP, stop it."""
+    root, config = project
+    server = ApiServer(root, config)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=20)
+        server.start()  # idempotent: no second thread
+        with urllib.request.urlopen(f"{server.url}/api/health", timeout=5) as response:
+            assert json.loads(response.read())["ok"] is True
+    finally:
+        server.stop()
     assert not server.is_running()
     server.stop()  # safe when already stopped
 
@@ -225,7 +194,8 @@ def test_desktop_app_constructs_and_reports_status(tmp_path: Path):
 
 def test_app_command_errors_without_desktop_extra(tmp_path: Path):
     if all(
-        importlib.util.find_spec(n) for n in ("streamlit", "webview", "pystray", "PIL")
+        importlib.util.find_spec(n)
+        for n in ("fastapi", "uvicorn", "webview", "pystray", "PIL")
     ):
         pytest.skip("desktop extra present; invoking would launch a GUI")
     runner = CliRunner()
@@ -233,4 +203,11 @@ def test_app_command_errors_without_desktop_extra(tmp_path: Path):
         assert runner.invoke(main, ["init"]).exit_code == 0
         result = runner.invoke(main, ["app"])
         assert result.exit_code != 0
-        assert "seshat[ui,desktop]" in result.output
+        assert "seshat[desktop]" in result.output
+
+
+def test_ui_command_is_gone():
+    """`seshat ui` was the Streamlit entry point; it should not come back."""
+    result = CliRunner().invoke(main, ["ui"])
+    assert result.exit_code != 0
+    assert "No such command" in result.output

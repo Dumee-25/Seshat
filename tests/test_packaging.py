@@ -1,22 +1,46 @@
 """Phase C: frozen-aware launching, first-run setup, autostart, user config.
 
 The PyInstaller/Inno build itself is a Windows-only manual step; here we test
-the code the build relies on."""
+the code the build relies on, plus the spec's bundling contract (cheap text
+assertions — a broken spec is only discovered at build time otherwise)."""
 
 import json
+from pathlib import Path
 
 import pytest
 
 from seshat.app import autostart, launch, setup, userconfig
 from seshat.config import load_config, write_default_config
 
+SPEC = (Path(__file__).resolve().parent.parent / "packaging" / "seshat.spec").read_text()
+BUILD_PS1 = (Path(__file__).resolve().parent.parent / "packaging" / "build.ps1").read_text()
+
+
+# -- the frozen bundle's contract ---------------------------------------------
+
+
+def test_spec_bundles_the_built_react_app():
+    assert 'str(STATIC), "seshat/api/static"' in SPEC
+
+
+def test_spec_collects_uvicorns_runtime_imports():
+    for hidden in ("uvicorn.loops.auto", "uvicorn.protocols.http.auto"):
+        assert hidden in SPEC
+
+
+def test_spec_excludes_streamlit():
+    assert '"streamlit", "altair", "pyarrow"' in SPEC
+    assert "collect_all" in SPEC and "streamlit" not in SPEC.split("excludes=")[0]
+
+
+def test_build_script_builds_the_frontend_before_freezing():
+    assert BUILD_PS1.index("npm run build") < BUILD_PS1.index("PyInstaller")
+
 # -- launch (frozen-aware commands) -------------------------------------------
 
 
 def test_dev_commands_use_python_dash_m():
     assert launch.is_frozen() is False
-    cmd = launch.streamlit_command(8080)
-    assert "-m" in cmd and "streamlit" in cmd and "8080" in cmd
     wcmd = launch.window_command("http://localhost:8080", "Seshat")
     assert "-m" in wcmd and "seshat.app.window" in wcmd
 
@@ -24,8 +48,6 @@ def test_dev_commands_use_python_dash_m():
 def test_frozen_commands_reinvoke_the_exe(monkeypatch):
     monkeypatch.setattr(launch.sys, "frozen", True, raising=False)
     monkeypatch.setattr(launch.sys, "executable", "C:/Program Files/Seshat/Seshat.exe")
-    scmd = launch.streamlit_command(9001)
-    assert scmd == ["C:/Program Files/Seshat/Seshat.exe", launch.RUN_STREAMLIT_FLAG, "9001"]
     wcmd = launch.window_command("http://x", "Seshat")
     assert wcmd[:2] == ["C:/Program Files/Seshat/Seshat.exe", launch.RUN_WINDOW_FLAG]
 
@@ -41,17 +63,15 @@ def test_dispatch_routes_window(monkeypatch):
         "seshat.app.window.open_window",
         lambda url, title="Seshat": opened.update(url=url, title=title),
     )
-    assert launch.dispatch([launch.RUN_WINDOW_FLAG, "http://localhost:8501", "Seshat"]) is True
-    assert opened == {"url": "http://localhost:8501", "title": "Seshat"}
+    assert launch.dispatch([launch.RUN_WINDOW_FLAG, "http://localhost:8765", "Seshat"]) is True
+    assert opened == {"url": "http://localhost:8765", "title": "Seshat"}
 
 
-def test_dispatch_routes_streamlit(monkeypatch):
-    called = {}
-    monkeypatch.setattr(
-        launch, "_run_streamlit_in_process", lambda port: called.update(port=port)
-    )
-    assert launch.dispatch([launch.RUN_STREAMLIT_FLAG, "8600"]) is True
-    assert called == {"port": 8600}
+def test_no_streamlit_sub_mode_remains():
+    """The API runs in-process now; nothing should re-invoke the exe for a UI
+    server."""
+    assert not hasattr(launch, "RUN_STREAMLIT_FLAG")
+    assert launch.dispatch(["--seshat-run-streamlit", "8600"]) is False
 
 
 # -- user config (default project memory) -------------------------------------

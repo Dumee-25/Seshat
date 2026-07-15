@@ -77,3 +77,56 @@ def test_session_detail(client):
 def test_session_detail_404(client):
     api, _ = client
     assert api.get("/api/sessions/9999").status_code == 404
+
+
+# -- intent confirm / correct -------------------------------------------------
+
+
+def entry_id_of(api) -> int:
+    item = next(i for i in api.get("/api/timeline").json()["items"] if i["kind"] == "session")
+    return item["meta"]["entry_id"]
+
+
+def test_timeline_carries_entry_id(client):
+    api, _ = client
+    item = next(i for i in api.get("/api/timeline").json()["items"] if i["kind"] == "session")
+    assert item["meta"]["entry_id"] == entry_id_of(api)
+    assert item["meta"]["intent_status"] == "inferred"
+
+
+def test_confirm_intent_keeps_the_inferred_text(client):
+    api, sid = client
+    eid = entry_id_of(api)
+    body = api.post(f"/api/entries/{eid}/intent", json={}).json()
+    assert body == {"id": eid, "intent": "class imbalance", "intent_status": "confirmed"}
+    entry = api.get(f"/api/sessions/{sid}").json()["entries"][0]
+    assert entry["inferred_intent"] == "class imbalance"
+    assert entry["intent_status"] == "confirmed"
+
+
+def test_correcting_intent_records_a_correction(client):
+    api, sid = client
+    eid = entry_id_of(api)
+    body = api.post(f"/api/entries/{eid}/intent", json={"intent": "recall was capped"}).json()
+    assert body["intent_status"] == "corrected"
+    entry = api.get(f"/api/sessions/{sid}").json()["entries"][0]
+    assert entry["inferred_intent"] == "recall was capped"
+    assert entry["intent_status"] == "corrected"
+
+
+def test_resubmitting_the_same_text_is_a_confirmation(client):
+    api, _ = client
+    eid = entry_id_of(api)
+    body = api.post(f"/api/entries/{eid}/intent", json={"intent": "  class imbalance  "}).json()
+    assert body["intent_status"] == "confirmed"  # unchanged text is not a correction
+
+
+def test_blank_intent_is_rejected(client):
+    api, _ = client
+    eid = entry_id_of(api)
+    assert api.post(f"/api/entries/{eid}/intent", json={"intent": "   "}).status_code == 400
+
+
+def test_intent_404(client):
+    api, _ = client
+    assert api.post("/api/entries/9999/intent", json={}).status_code == 404

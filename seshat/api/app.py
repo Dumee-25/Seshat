@@ -35,6 +35,12 @@ class LinkRequest(BaseModel):
     url: str
 
 
+class IntentRequest(BaseModel):
+    """Omit `intent` to confirm what was inferred as-is; send text to correct it."""
+
+    intent: str | None = None
+
+
 def _default_link_ingestor(root: Path, config: SeshatConfig, url: str) -> int | None:
     from seshat.inference.provider import get_embedder
     from seshat.papers.web import ingest_url
@@ -168,6 +174,24 @@ def create_app(
                     for ev in events
                 ],
             }
+
+    @app.post("/api/entries/{entry_id}/intent")
+    def set_intent(entry_id: int, req: IntentRequest) -> dict:
+        """Confirm or correct an inferred intent — the one place the cockpit
+        writes back. An empty body confirms the inference as it stands; text
+        that matches it is still a confirmation, not a correction."""
+        with store() as s:
+            try:
+                entry = s.get_entry(entry_id)
+            except StoreError:
+                raise HTTPException(status_code=404, detail="No such entry") from None
+            intent = req.intent if req.intent is not None else entry.inferred_intent
+            if not intent or not intent.strip():
+                raise HTTPException(status_code=400, detail="An intent needs some text.")
+            intent = intent.strip()
+            status = "confirmed" if intent == (entry.inferred_intent or "") else "corrected"
+            s.set_intent(entry_id, intent, status=status)
+            return {"id": entry_id, "intent": intent, "intent_status": status}
 
     @app.get("/api/chat/history")
     def chat_history() -> dict:

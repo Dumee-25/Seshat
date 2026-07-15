@@ -8,8 +8,9 @@ the Python package. Everything here runs on Windows; there is no cross-compile.
 - Windows 10/11 with the [WebView2 runtime](https://developer.microsoft.com/microsoft-edge/webview2/) (preinstalled on Windows 11).
 - A Python 3.11+ environment with the app and build tools installed:
   ```
-  python -m pip install -e ".[ui,desktop]" pyinstaller
+  python -m pip install -e ".[desktop]" pyinstaller
   ```
+- [Node.js](https://nodejs.org) on PATH, to build the React cockpit that gets bundled into the exe.
 - [Inno Setup 6](https://jrsoftware.org/isinfo.php) for the installer (optional; the onedir app builds without it).
 - [Ollama](https://ollama.com) is a runtime dependency, not bundled. The app's first-run `seshat setup` detects it and pulls the models.
 
@@ -18,6 +19,11 @@ the Python package. Everything here runs on Windows; there is no cross-compile.
 ```
 powershell -ExecutionPolicy Bypass -File packaging\build.ps1
 ```
+
+That script builds the frontend (`npm ci && npm run build` in `frontend/`, which
+writes `seshat/api/static`) and then freezes the app. The spec refuses to build
+if that static bundle is missing, so the exe can never ship a backend with no
+UI. The build output is not committed; it is produced fresh on every build.
 
 Outputs:
 - `dist\Seshat\Seshat.exe` — the standalone app (a folder; ship the whole folder).
@@ -29,24 +35,24 @@ Outputs:
 `seshat/app/entry.py`:
 
 - no arguments (double-click) -> launches the desktop app (`seshat app`);
-- `--seshat-run-streamlit <port>` -> runs the Streamlit server in-process;
 - `--seshat-run-window <url>` -> opens a UI window;
 - anything else -> the normal CLI (`Seshat.exe watch`, `Seshat.exe stats`, ...).
 
-The app re-invokes itself with those internal flags instead of `python -m ...`,
+The app re-invokes itself with that internal flag instead of `python -m ...`,
 because a frozen exe has no `python -m`. That logic lives in
-`seshat/app/launch.py` and is unit-tested.
+`seshat/app/launch.py` and is unit-tested. The cockpit API needs no such mode:
+it runs on a background thread inside the main process.
 
 ## Debugging a failed build
-
-Streamlit is the usual culprit. If the built app exits immediately or errors:
 
 1. In `packaging/seshat.spec`, set `console=True` and rebuild — you'll see the
    traceback in a console window.
 2. A `ModuleNotFoundError` at runtime means a hidden import was missed: add it
-   to `hiddenimports` in the spec.
-3. A missing data file (templates, static assets) means extend the
-   `collect_all` list or add an explicit `datas` entry.
+   to `hiddenimports` in the spec. uvicorn is the usual culprit, since it
+   resolves its loop and protocol implementations by string at runtime.
+3. A window that opens blank means FastAPI has no static files to serve: check
+   that `seshat/api/static/index.html` exists and that the spec's `datas` entry
+   for it survived.
 4. Rebuild and repeat. Once it launches cleanly, set `console=False` again.
 
 ## Project selection
