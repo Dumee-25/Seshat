@@ -235,6 +235,67 @@ def test_launch_command_dev_form():
 # -- entry (frozen dispatch + default to app) ---------------------------------
 
 
+# -- windowed build has no console (entry.ensure_streams) ---------------------
+
+
+def test_ensure_streams_replaces_missing_stdout(monkeypatch):
+    """A frozen windowed app gets sys.stdout = None; anything that touches it
+    dies. See test_uvicorn_config_needs_a_real_stdout for the actual casualty."""
+    import io
+
+    from seshat.app import entry
+
+    monkeypatch.setattr(entry.sys, "stdout", None)
+    monkeypatch.setattr(entry.sys, "stderr", None)
+    fake = io.StringIO()
+    entry.ensure_streams(stream_factory=lambda: fake)
+    assert entry.sys.stdout is fake
+    assert entry.sys.stderr is fake
+    print("safe to print now", file=entry.sys.stdout)
+    assert entry.sys.stdout.isatty() is False  # the call uvicorn makes
+
+
+def test_ensure_streams_leaves_real_streams_alone(monkeypatch):
+    import io
+
+    from seshat.app import entry
+
+    out, err = io.StringIO(), io.StringIO()
+    monkeypatch.setattr(entry.sys, "stdout", out)
+    monkeypatch.setattr(entry.sys, "stderr", err)
+    entry.ensure_streams(stream_factory=lambda: pytest.fail("should not open a log"))
+    assert entry.sys.stdout is out and entry.sys.stderr is err
+
+
+def test_uvicorn_config_needs_a_real_stdout(monkeypatch):
+    """The regression itself: uvicorn's formatter calls sys.stdout.isatty()
+    while configuring logging, so building a Config with no stdout raised
+    'Unable to configure formatter' and killed the double-clicked app."""
+    uvicorn = pytest.importorskip("uvicorn")
+    from fastapi import FastAPI
+
+    from seshat.app import entry
+
+    monkeypatch.setattr("sys.stdout", None)
+    with pytest.raises(ValueError, match="Unable to configure formatter"):
+        uvicorn.Config(FastAPI(), host="localhost", port=0, log_level="warning")
+
+    entry.ensure_streams(stream_factory=lambda: __import__("io").StringIO())
+    uvicorn.Config(FastAPI(), host="localhost", port=0, log_level="warning")  # no raise
+
+
+def test_entry_ensures_streams_before_anything_else(monkeypatch):
+    """Ordering matters: the streams must be real before dispatch or the CLI
+    can import something that logs."""
+    from seshat.app import entry
+
+    calls = []
+    monkeypatch.setattr(entry, "ensure_streams", lambda: calls.append("streams"))
+    monkeypatch.setattr(launch, "dispatch", lambda argv: calls.append("dispatch") or True)
+    entry.main(["--seshat-run-window", "http://x"])
+    assert calls == ["streams", "dispatch"]
+
+
 def test_entry_handles_internal_mode(monkeypatch):
     from seshat.app import entry
 

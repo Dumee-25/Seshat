@@ -42,17 +42,29 @@ if (-not (Test-Path "dist\Seshat\Seshat.exe")) {
 }
 Write-Host "Built dist\Seshat\Seshat.exe" -ForegroundColor Green
 
-# Compile the installer if Inno Setup's ISCC is available.
-$iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+# Compile the installer if Inno Setup's ISCC is available. Inno Setup 6 installs
+# per-user by default (no admin prompt), so check LOCALAPPDATA as well as the
+# machine-wide location — a per-user install is easy to miss and looks identical
+# to Inno Setup not being installed at all.
+$iscc = (Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source
 if (-not $iscc) {
-    $guess = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-    if (Test-Path $guess) { $iscc = $guess }
+    $candidates = @(
+        "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
+        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+        "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+    )
+    $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 }
 if ($iscc) {
     Write-Host "== Inno Setup ==" -ForegroundColor Cyan
+    Write-Host "Using $iscc"
     & $iscc packaging\seshat.iss
+    if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
+    if (-not (Test-Path "dist\SeshatSetup.exe")) {
+        throw "ISCC reported success but dist\SeshatSetup.exe is missing"
+    }
     Write-Host "Built dist\SeshatSetup.exe" -ForegroundColor Green
 } else {
     Write-Host "Inno Setup (ISCC.exe) not found; skipping installer." -ForegroundColor Yellow
-    Write-Host "Install it from https://jrsoftware.org/isinfo.php and re-run." -ForegroundColor Yellow
+    Write-Host "Install it (winget install JRSoftware.InnoSetup) and re-run." -ForegroundColor Yellow
 }
