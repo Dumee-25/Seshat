@@ -24,7 +24,7 @@ Seshat is a pipeline of four layers, each feeding the next:
 
 3. **Paper linkage.** PDFs dropped into the papers folder are extracted, chunked, and embedded into the same vector store. A paper added within roughly a week before a session is linked to it with a low-confidence edge, and its most relevant passages are provided to the journal model -- connecting what you read to what you changed.
 
-4. **Query.** `seshat cockpit` opens a chat over the whole history. Retrieval is hybrid: vector search over journal entries and paper chunks combined with structured filters (file path, date range). Every answer cites the sessions it draws on, and each citation expands to the underlying diffs and outputs, so trust never rests on the model's word alone.
+4. **Query.** `seshat cockpit` opens the workspace: a timeline of everything that happened, a chat that answers across all of it, and lenses onto that same spine for papers, code, and data. Retrieval is hybrid: vector search over journal entries and paper chunks combined with structured filters (file path, date range). Every answer cites the sessions it draws on, and each citation jumps to that moment in the timeline, where an intent Seshat guessed at can be confirmed or corrected in one click. The raw diffs behind each entry are kept and served by the API, but the cockpit does not yet display them -- see [docs/COCKPIT.md](docs/COCKPIT.md).
 
 Everything runs locally and in a single SQLite file: the store, the graph, and the vector index (via `sqlite-vec`) all live in one `.seshat/seshat.sqlite3`. Ollama serves both generation and embeddings, so there is no heavyweight ML runtime to install. Nothing leaves the machine, including telemetry. Users who prefer quality over privacy can point the provider at any OpenAI-compatible API instead.
 
@@ -83,9 +83,9 @@ With the `desktop` extra installed, a single command replaces the separate watch
 seshat app
 ```
 
-It opens a native window for the chat and timeline, and runs the watcher in the background behind a system-tray icon. The tray shows status (watching, and how many sessions are queued for journaling), can pause capture, opens the window on demand, and quits everything cleanly. On Windows the window uses the built-in WebView2 runtime — no browser tab, no extra download.
+It opens the cockpit in a native window — timeline, chat, papers, code, and data — and runs the watcher in the background behind a system-tray icon. The tray shows status (watching, and how many sessions are queued for journaling), can pause capture, opens the window on demand, and quits everything cleanly. On Windows the window uses the built-in WebView2 runtime — no browser tab, no extra download. Because a windowed app has no console, it writes what it would have printed to `~/.seshat/app.log`.
 
-To build a double-click Windows installer (`SeshatSetup.exe`) from source, see [packaging/README.md](packaging/README.md).
+To build a double-click Windows installer (`SeshatSetup.exe`) from source, see [packaging/README.md](packaging/README.md). The cockpit's design and build plan are in [docs/COCKPIT.md](docs/COCKPIT.md).
 
 ## Commands
 
