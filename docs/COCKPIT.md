@@ -162,6 +162,19 @@ Each phase ships behind the same PR-per-phase, CI-green rhythm as the rest of th
 
 **Opening a project from the window is still unbuilt** (§6). The health banner tells a user what is wrong with their *install*; it does not help them point the cockpit at a different folder.
 
-**The frontend has no test suite.** `markdown.tsx` is hand-rolled parsing and the riskiest logic in the UI; it was verified against adversarial fixtures in a browser, not by tests. Adding vitest is a toolchain decision worth making deliberately rather than smuggling into a UX change.
+*(The frontend now has a test suite — see §10.)*
 
 Genuinely out of scope for cockpit v1: in-app code editing and execution; multiple projects open at once; team/collaboration mode; Zotero sync; MLflow parsing; methods-section drafting; the contradiction detector.
+
+## 10. Testing the cockpit
+
+The Python side had tests from the start; the frontend was verified by driving it in a browser, which caught real bugs but left nothing behind to stop them coming back. `npm test` (vitest + jsdom, run in CI alongside pytest) now closes that.
+
+The suite is weighted by risk rather than by coverage. Roughly a third of it is `markdown.tsx`, because a hand-rolled parser is the most fragile thing in the UI and because *prose that merely looks like markup* is where every bug in it has been — `2 * 3 = 6`, `val_loss_history`, an unclosed backtick. The rest pins down the two mistakes this codebase has now made more than once:
+
+- a panel that failed to load must never fall through to an empty state asserting the project is empty, and
+- the status bar must report the last *poll*, not the last success.
+
+Vitest is pinned to the same major as Vite so tests and the build share one toolchain. Vitest 4 pulls its own newer Vite, which would mean tests transforming code differently from `vite build`; that is worth avoiding, and worth remembering when either is upgraded.
+
+Component tests mock `api.ts` — the single module that talks HTTP — so nothing here needs a running server, and the API contract stays covered by the Python tests on the other side of it.
