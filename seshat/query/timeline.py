@@ -56,11 +56,41 @@ def _session_item(store: Store, session) -> TimelineItem:
     )
 
 
-def build_timeline(
+def _haystack(item: TimelineItem) -> str:
+    """The text a search matches against: what the row shows, plus the intent.
+
+    Searching the intent matters more than it looks — "why did I drop
+    region_code" is usually recorded as an inference, not in the summary line.
+    """
+    intent = item.meta.get("intent")
+    parts = [item.title, item.subtitle or "", intent if isinstance(intent, str) else ""]
+    return "\n".join(parts).casefold()
+
+
+def timeline_page(
     store: Store,
     limit: int = 100,
+    offset: int = 0,
     kinds: set[str] | None = None,
     since: str | None = None,
+    query: str | None = None,
+) -> tuple[list[TimelineItem], int]:
+    """One page of the timeline, plus how many items match in total.
+
+    The total is what lets the cockpit say "there is more" — without it a
+    short page is indistinguishable from the end of history, which is how the
+    feed silently truncated at its default limit before.
+    """
+    items = _collect(store, kinds=kinds, since=since, query=query)
+    start = max(offset, 0)
+    return items[start : start + limit], len(items)
+
+
+def _collect(
+    store: Store,
+    kinds: set[str] | None = None,
+    since: str | None = None,
+    query: str | None = None,
 ) -> list[TimelineItem]:
     kinds = kinds or set(KINDS)
     items: list[TimelineItem] = []
@@ -90,5 +120,8 @@ def build_timeline(
 
     if since:
         items = [item for item in items if item.ts >= since]
+    if query and query.strip():
+        needle = query.strip().casefold()
+        items = [item for item in items if needle in _haystack(item)]
     items.sort(key=lambda item: item.ts, reverse=True)
-    return items[:limit]
+    return items

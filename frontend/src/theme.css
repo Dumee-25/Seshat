@@ -178,6 +178,107 @@ body {
   margin-bottom: 18px;
 }
 
+/* Timeline: filter bar stays put, feed scrolls under it. */
+.timeline {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.tl-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 10px;
+}
+.tl-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.tl-search {
+  flex: 1;
+  min-width: 200px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--sand);
+  font-family: var(--sans);
+  font-size: 13.5px;
+}
+.tl-search:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+.chips {
+  display: flex;
+  gap: 6px;
+}
+.chip {
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.chip:hover {
+  color: var(--sand-dim);
+}
+.chip.on {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(201, 162, 39, 0.1);
+}
+.tl-range {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: var(--sand-dim);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.tl-range:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+.tl-more {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 0 8px 22px;
+}
+.tl-count {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.tl-more .ghost {
+  background: transparent;
+  color: var(--sand-dim);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.tl-more .ghost:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
 .feed {
   border-left: 2px solid var(--border);
   margin-left: 6px;
@@ -339,6 +440,156 @@ body {
 .badge.confirmed {
   border-color: var(--faience);
   color: var(--faience-text);
+}
+
+/* Session evidence: the raw events behind a journal entry. */
+.evidence-toggle {
+  display: block;
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--sand-dim);
+}
+.detail {
+  margin: 10px 0 4px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.detail-entry {
+  margin-bottom: 14px;
+}
+.detail-field {
+  font-size: 12.5px;
+  color: var(--sand-dim);
+  line-height: 1.5;
+}
+.detail-key {
+  display: inline-block;
+  min-width: 62px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ev {
+  border-top: 1px solid var(--border);
+  padding: 12px 0 4px;
+}
+.ev:first-of-type {
+  border-top: none;
+}
+.ev-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.ev-kind {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faience-text);
+}
+.ev-path {
+  color: var(--sand-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ev-none {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 12.5px;
+}
+.ev-pre,
+.diff,
+.cell-src {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--kohl);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow-x: auto;
+  max-height: 340px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.diff {
+  padding: 6px 0;
+}
+.diff > div {
+  padding: 0 10px;
+}
+.diff-add {
+  background: rgba(47, 126, 120, 0.16);
+  color: var(--faience-text);
+}
+.diff-del {
+  background: rgba(166, 58, 43, 0.16);
+  color: var(--rubric-text);
+}
+.diff-hunk {
+  color: var(--gold);
+}
+.diff-file {
+  color: var(--muted);
+}
+.diff-ctx {
+  color: var(--sand-dim);
+}
+.commit-msg {
+  font-family: var(--serif);
+  font-size: 14px;
+  color: var(--sand);
+  margin-bottom: 4px;
+}
+.commit-files {
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.nb-flags {
+  font-size: 11.5px;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+.cell {
+  margin-bottom: 10px;
+}
+.cell-label {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.cell-label.add {
+  color: var(--faience-text);
+}
+.cell-label.del {
+  color: var(--rubric-text);
+}
+.cell-label.mod {
+  color: var(--gold);
+}
+.cell-src {
+  margin-bottom: 4px;
+}
+.cell-outputs {
+  margin-top: 4px;
+}
+.cell-output {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  padding: 3px 10px;
+  border-left: 2px solid var(--border);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .statusbar {

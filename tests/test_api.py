@@ -65,6 +65,32 @@ def test_timeline_kinds_filter(client):
     assert {i["kind"] for i in items} == {"paper"}
 
 
+def test_timeline_search(client):
+    api, sid = client
+    body = api.get("/api/timeline?q=oversampling").json()
+    assert [i["id"] for i in body["items"]] == [sid]
+    assert body["total"] == 1
+
+
+def test_timeline_search_finds_the_intent(client):
+    api, _ = client
+    assert api.get("/api/timeline?q=class+imbalance").json()["total"] == 1
+
+
+def test_timeline_reports_total_beyond_the_page(client):
+    api, _ = client
+    body = api.get("/api/timeline?limit=1").json()
+    assert len(body["items"]) == 1
+    assert body["total"] == 2  # a session and a paper
+
+
+def test_timeline_offset_pages_through(client):
+    api, _ = client
+    first = api.get("/api/timeline?limit=1").json()["items"]
+    second = api.get("/api/timeline?limit=1&offset=1").json()["items"]
+    assert first[0]["kind"] != second[0]["kind"]
+
+
 def test_session_detail(client):
     api, sid = client
     body = api.get(f"/api/sessions/{sid}").json()

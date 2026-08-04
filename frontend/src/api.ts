@@ -50,10 +50,62 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
 
 export const getStatus = () => getJSON<Status>("/api/status");
 
-export const getTimeline = (kinds?: string) =>
-  getJSON<{ items: TimelineItem[] }>(
-    `/api/timeline${kinds ? `?kinds=${kinds}` : ""}`,
-  ).then((r) => r.items);
+export interface TimelineQuery {
+  kinds?: string[];
+  since?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface TimelinePage {
+  items: TimelineItem[];
+  /** Matches in the whole store, not just this page — drives "load more". */
+  total: number;
+}
+
+export const getTimeline = (opts: TimelineQuery = {}) => {
+  const params = new URLSearchParams();
+  if (opts.kinds?.length) params.set("kinds", opts.kinds.join(","));
+  if (opts.since) params.set("since", opts.since);
+  if (opts.q?.trim()) params.set("q", opts.q.trim());
+  if (opts.limit != null) params.set("limit", String(opts.limit));
+  if (opts.offset != null) params.set("offset", String(opts.offset));
+  const qs = params.toString();
+  return getJSON<TimelinePage>(`/api/timeline${qs ? `?${qs}` : ""}`);
+};
+
+/** A raw event exactly as captured — the evidence behind a journal entry. */
+export interface RawEvent {
+  ts: string;
+  kind: string;
+  path: string | null;
+  payload: Record<string, unknown>;
+}
+
+export interface EntryDetail {
+  id: number;
+  what_changed: string;
+  observable_outcome: string | null;
+  inferred_intent: string | null;
+  intent_status: IntentStatus;
+  intent_confidence: number | null;
+  files_touched: string[];
+}
+
+export interface SessionDetailData {
+  session: {
+    id: number;
+    started_at: string;
+    ended_at: string | null;
+    status: string;
+  };
+  entries: EntryDetail[];
+  events: RawEvent[];
+}
+
+export const getSession = (id: number) =>
+  getJSON<SessionDetailData>(`/api/sessions/${id}`);
 
 export interface Citation {
   session_id: number;

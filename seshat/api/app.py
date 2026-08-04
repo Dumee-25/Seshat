@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from seshat.config import SeshatConfig
-from seshat.query.timeline import KINDS, build_timeline
+from seshat.query.timeline import KINDS, timeline_page
 from seshat.store.db import Store, StoreError
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -132,14 +132,20 @@ def create_app(
 
     @app.get("/api/timeline")
     def timeline(
-        limit: int = 100, kinds: str | None = None, since: str | None = None
+        limit: int = 100,
+        offset: int = 0,
+        kinds: str | None = None,
+        since: str | None = None,
+        q: str | None = None,
     ) -> dict:
         selected = (
             {k for k in kinds.split(",") if k in KINDS} if kinds else set(KINDS)
         )
         with store() as s:
-            items = build_timeline(s, limit=limit, kinds=selected, since=since)
-        return {"items": [item.to_dict() for item in items]}
+            items, total = timeline_page(
+                s, limit=limit, offset=offset, kinds=selected, since=since, query=q
+            )
+        return {"items": [item.to_dict() for item in items], "total": total}
 
     @app.get("/api/sessions/{session_id}")
     def session_detail(session_id: int) -> dict:
