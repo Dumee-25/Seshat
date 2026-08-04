@@ -22,6 +22,88 @@ def test_migrations_apply_and_are_idempotent(tmp_path: Path):
     assert (tmp_path / ".seshat" / "seshat.sqlite3").exists()
 
 
+def test_migration_backfills_model_intent_on_an_existing_db(tmp_path: Path):
+    """The v7 upgrade path: a database created before the column existed."""
+    from seshat.store.schema import MIGRATIONS
+
+    db = tmp_path / ".seshat" / "seshat.sqlite3"
+    db.parent.mkdir(parents=True)
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
+    )
+    for version, ddl in enumerate(MIGRATIONS[:-1], start=1):  # everything up to v7
+        conn.executescript(ddl)
+        conn.execute(
+            "INSERT INTO schema_version (version, applied_at) VALUES (?, '2026-01-01')",
+            (version,),
+        )
+    conn.execute("INSERT INTO sessions (started_at, status) VALUES ('2026-01-01', 'processed')")
+    conn.execute(
+        "INSERT INTO entries (session_id, what_changed, inferred_intent, intent_status,"
+        " model_version, prompt_version, created_at)"
+        " VALUES (1, 'did a thing', 'a guess', 'inferred', 'm', 'v2', '2026-01-01')"
+    )
+    conn.commit()
+    conn.close()
+
+    with Store.open(tmp_path) as s:
+        assert s.schema_version() == SCHEMA_VERSION
+        (entry,) = s.entries()
+        # The pre-existing guess is adopted as the model's, not left null.
+        assert entry.model_intent == "a guess"
+        assert s.reset_intent(entry.id) == "a guess"
+
+
+def make_entry(store: Store, intent: str = "a guess") -> int:
+    sid = store.create_session(started_at="2026-03-01T09:00:00+00:00")
+    return store.add_entry(JournalEntry(
+        session_id=sid, what_changed="did a thing", inferred_intent=intent,
+        model_version="m", prompt_version="v2",
+    ))
+
+
+def test_new_entry_records_the_model_guess(store: Store):
+    eid = make_entry(store)
+    assert store.get_entry(eid).model_intent == "a guess"
+
+
+def test_correcting_an_intent_preserves_the_model_guess(store: Store):
+    eid = make_entry(store)
+    store.set_intent(eid, "what actually happened", status="corrected")
+    entry = store.get_entry(eid)
+    assert entry.inferred_intent == "what actually happened"
+    assert entry.intent_status == "corrected"
+    assert entry.model_intent == "a guess"  # not clobbered
+
+
+def test_reset_intent_restores_the_guess_and_the_unreviewed_status(store: Store):
+    eid = make_entry(store)
+    store.set_intent(eid, "wrong edit", status="corrected")
+    assert store.reset_intent(eid) == "a guess"
+    entry = store.get_entry(eid)
+    assert entry.inferred_intent == "a guess"
+    assert entry.intent_status == "inferred"
+
+
+def test_reset_intent_undoes_a_confirmation(store: Store):
+    eid = make_entry(store)
+    store.set_intent(eid, "a guess", status="confirmed")
+    store.reset_intent(eid)
+    assert store.get_entry(eid).intent_status == "inferred"
+
+
+def test_reset_intent_without_a_recorded_guess_is_refused(store: Store):
+    eid = make_entry(store, intent=None)  # type: ignore[arg-type]
+    with pytest.raises(StoreError, match="no recorded model guess"):
+        store.reset_intent(eid)
+
+
+def test_reset_intent_unknown_entry(store: Store):
+    with pytest.raises(StoreError, match="No entry with id"):
+        store.reset_intent(9999)
+
+
 def test_raw_event_roundtrip(store: Store):
     event_id = store.append_event(
         "notebook_diff",

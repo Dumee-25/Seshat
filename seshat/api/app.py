@@ -19,7 +19,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from seshat.app.setup import SetupReport, run_setup
 from seshat.config import SeshatConfig
+from seshat.inference.queue import gpu_busy
 from seshat.query.timeline import KINDS, timeline_page
 from seshat.store.db import Store, StoreError
 
@@ -103,11 +105,15 @@ def create_app(
     engine_cm: Callable | None = None,
     link_ingestor: Callable[[str], int | None] | None = None,
     open_url: Callable[[str], None] | None = None,
+    busy_check: Callable[[], bool] | None = None,
+    setup_check: Callable[[], SetupReport] | None = None,
 ) -> FastAPI:
     root = Path(root)
     engine_cm = engine_cm or (lambda: _default_engine(root, config))
     link_ingestor = link_ingestor or (lambda url: _default_link_ingestor(root, config, url))
     open_url = open_url or webbrowser.open
+    busy_check = busy_check or gpu_busy
+    setup_check = setup_check or (lambda: run_setup(config, pull=False))
     app = FastAPI(title="Seshat", version="0.1.0")
 
     # The frozen build serves same-origin, but the Vite dev server is a
@@ -130,13 +136,34 @@ def create_app(
     def status() -> dict:
         with store() as s:
             sessions = s.sessions()
+            queued = sum(1 for x in sessions if x.status == "closed")
             return {
                 "project": config.name,
                 "root": str(root),
                 "sessions": len(sessions),
-                "queued": sum(1 for x in sessions if x.status == "closed"),
+                "queued": queued,
                 "papers": len(s.papers()),
+                # Why the queue is not draining. A count that sits still during
+                # a training run looks broken; it is the design working.
+                "gpu_busy": busy_check() if queued else False,
+                "cpu_fallback": config.inference.cpu_fallback,
             }
+
+    @app.get("/api/setup")
+    def setup() -> dict:
+        """Whether Ollama can actually answer — a read-only check, never pulls.
+
+        A cockpit with nothing in it looks identical whether the project is
+        new or the model was never installed. This is how the UI tells them
+        apart instead of leaving the user to go read the README.
+        """
+        report = setup_check()
+        return {
+            "ollama_installed": report.ollama_installed,
+            "ollama_running": report.ollama_running,
+            "missing_models": report.missing,
+            "ok": report.ok,
+        }
 
     @app.get("/api/timeline")
     def timeline(
@@ -206,6 +233,23 @@ def create_app(
             status = "confirmed" if intent == (entry.inferred_intent or "") else "corrected"
             s.set_intent(entry_id, intent, status=status)
             return {"id": entry_id, "intent": intent, "intent_status": status}
+
+    @app.post("/api/entries/{entry_id}/intent/reset")
+    def reset_intent(entry_id: int) -> dict:
+        """Undo a confirm/correct, putting the model's own guess back.
+
+        Roughly a third of inferences are expected to be wrong, so triage is
+        something users do in bulk and fast — which makes a mis-click cheap
+        only if it is reversible.
+        """
+        with store() as s:
+            try:
+                intent = s.reset_intent(entry_id)
+            except StoreError as exc:
+                # No such entry, or one written before the guess was kept.
+                code = 404 if "No entry" in str(exc) else 409
+                raise HTTPException(status_code=code, detail=str(exc)) from None
+            return {"id": entry_id, "intent": intent, "intent_status": "inferred"}
 
     @app.get("/api/chat/history")
     def chat_history() -> dict:

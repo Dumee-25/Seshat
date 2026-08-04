@@ -225,8 +225,8 @@ class Store:
                 session_id, what_changed, observable_outcome,
                 inferred_intent, intent_confidence, intent_status,
                 files_touched, raw_event_ids,
-                model_version, prompt_version, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                model_version, prompt_version, created_at, model_intent
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 entry.session_id,
@@ -240,6 +240,9 @@ class Store:
                 entry.model_version,
                 entry.prompt_version,
                 entry.created_at or utcnow(),
+                # A fresh entry's intent *is* the model's guess unless the
+                # caller is explicitly restoring a preserved one.
+                entry.model_intent if entry.model_intent is not None else entry.inferred_intent,
             ),
         )
         self._conn.commit()
@@ -265,7 +268,12 @@ class Store:
         return cur.rowcount
 
     def set_intent(self, entry_id: int, intent: str, status: str = "corrected") -> None:
-        """The one-click correction path: user fixes an inferred intent."""
+        """The one-click correction path: user fixes an inferred intent.
+
+        `model_intent` is deliberately untouched — it holds what the model
+        said, which is what makes the edit reversible and keeps the audit
+        trail honest about the guess that was actually made.
+        """
         if status not in ("confirmed", "corrected"):
             raise StoreError(f"Intent status must be 'confirmed' or 'corrected', got {status!r}.")
         cur = self._conn.execute(
@@ -275,6 +283,27 @@ class Store:
         if cur.rowcount == 0:
             raise StoreError(f"No entry with id {entry_id}.")
         self._conn.commit()
+
+    def reset_intent(self, entry_id: int) -> str | None:
+        """Undo a confirm/correct: put the model's guess back, still unreviewed.
+
+        Returns the restored text. Entries written before the guess was
+        preserved have no `model_intent`; those cannot be reverted.
+        """
+        row = self._conn.execute(
+            "SELECT model_intent FROM entries WHERE id = ?", (entry_id,)
+        ).fetchone()
+        if row is None:
+            raise StoreError(f"No entry with id {entry_id}.")
+        original = row["model_intent"]
+        if original is None:
+            raise StoreError("This entry has no recorded model guess to restore.")
+        self._conn.execute(
+            "UPDATE entries SET inferred_intent = ?, intent_status = 'inferred' WHERE id = ?",
+            (original, entry_id),
+        )
+        self._conn.commit()
+        return original
 
     @staticmethod
     def _entry_from_row(row: sqlite3.Row) -> JournalEntry:
@@ -286,6 +315,7 @@ class Store:
             inferred_intent=row["inferred_intent"],
             intent_confidence=row["intent_confidence"],
             intent_status=row["intent_status"],
+            model_intent=row["model_intent"],
             files_touched=json.loads(row["files_touched"]),
             raw_event_ids=json.loads(row["raw_event_ids"]),
             model_version=row["model_version"],

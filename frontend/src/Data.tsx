@@ -6,6 +6,7 @@ import {
   type DataDetail,
   type DataPreview,
 } from "./api";
+import { Failed } from "./Failed";
 
 function when(ts: string | null): string {
   if (!ts) return "";
@@ -53,9 +54,19 @@ function Preview({ preview }: { preview: DataPreview }) {
 export function Data({ onCite }: { onCite: (sessionId: number) => void }) {
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [detail, setDetail] = useState<DataDetail | null>(null);
+  // See Code.tsx: a failed load must never fall through to an empty state
+  // that claims the project has no data.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    getArtifacts().then(setArtifacts).catch(() => {});
+    getArtifacts()
+      .then((a) => {
+        setArtifacts(a);
+        setLoaded(true);
+      })
+      .catch((e) => setLoadError(String(e instanceof Error ? e.message : e)));
   }, []);
 
   if (detail) {
@@ -84,25 +95,34 @@ export function Data({ onCite }: { onCite: (sessionId: number) => void }) {
     );
   }
 
+  if (loadError) return <Failed what="the data panel" detail={loadError} />;
+
   return (
     <div>
+      {error && <div className="chat-error">{error}</div>}
       {artifacts.length === 0 ? (
         <div className="empty">
-          No data tracked yet. CSV and JSON files in the project's results folder
-          show up here.
+          {loaded
+            ? "No data tracked yet. CSV and JSON files in the project's results folder show up here."
+            : "Loading…"}
         </div>
       ) : (
         <div className="paper-list">
           {artifacts.map((a) => (
-            <div
+            <button
               key={a.id}
               className="paper-row"
-              onClick={() => getArtifact(a.id).then(setDetail)}
+              onClick={() => {
+                setError(null);
+                getArtifact(a.id)
+                  .then(setDetail)
+                  .catch((e) => setError(String(e instanceof Error ? e.message : e)));
+              }}
             >
               <span className="src pdf">{a.kind}</span>
               <span className="paper-title mono">{a.path}</span>
               <span className="paper-date">{when(a.created_at)}</span>
-            </div>
+            </button>
           ))}
         </div>
       )}

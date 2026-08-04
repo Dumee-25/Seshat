@@ -166,6 +166,16 @@ MIGRATIONS: list[str] = [
         text TEXT NOT NULL
     );
     """,
+    # v7: what the model originally guessed, kept separately from the intent
+    # in force. Correcting an entry used to overwrite `inferred_intent`, which
+    # destroyed the guess -- so a correction could not be undone, and the
+    # audit trail lost what the model had actually said. Backfilled from the
+    # current value: for untouched entries that *is* the model's guess, and
+    # for already-corrected ones the original is gone for good.
+    """
+    ALTER TABLE entries ADD COLUMN model_intent TEXT;
+    UPDATE entries SET model_intent = inferred_intent;
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)
@@ -197,6 +207,9 @@ class JournalEntry:
     inferred_intent: str | None = None
     intent_confidence: float | None = None
     intent_status: str = "inferred"
+    # What the model said, preserved across corrections so they can be undone.
+    # Defaults to inferred_intent at insert time; never written again after.
+    model_intent: str | None = None
     files_touched: list[str] = field(default_factory=list)
     raw_event_ids: list[int] = field(default_factory=list)
     model_version: str = "unknown"
