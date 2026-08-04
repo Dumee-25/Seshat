@@ -76,6 +76,7 @@ POST /api/chat/clear                 forget the conversation
 GET  /api/papers                     ingested papers + links
 GET  /api/papers/{id}                reader content
 POST /api/links                      ingest a URL
+POST /api/open-external              hand an http(s) link to the system browser
 GET  /api/files                      project file tree
 GET  /api/files/changes              recent changes, linked to sessions
 GET  /api/files/history?path=        one file's change history
@@ -117,6 +118,14 @@ Highest reuse and value first, so the cockpit feels real early.
 
    The timeline also became self-fetching in the process: filter state, paging, and its poll live in `Timeline.tsx` rather than being threaded down from `App.tsx`.
 
+8. ~~**Legibility of the answer surface.**~~ *Done.* The chat worked but read badly, and two of its controls were traps:
+   - **Citations name themselves.** "Aug 1 · Added SMOTE oversampling…" instead of "session 12" — the date and the summary were already fetched and only used as a tooltip. A session id tells a reader nothing about whether to trust an answer.
+   - **Answers render as markdown.** A small hand-rolled renderer (`markdown.tsx`) covers what local models actually emit — headings, lists, fenced code, emphasis. It builds React elements, so nothing a model writes can inject markup, and it deliberately leaves `region_code`, `k_neighbors`, and `2 * 3` alone rather than reading them as emphasis.
+   - **`Clear` takes two steps.** It sat beside `Ask` and erased the conversation on a single misclick.
+   - **A question can be cancelled**, and the wait shows elapsed seconds so a slow local model does not look hung.
+   - **The input is multi-line** (Enter sends, Shift+Enter breaks).
+   - **Reader links open in the system browser** via `POST /api/open-external`. The desktop window has no chrome, so following a link in place replaced the cockpit with a web page the user could not get back from.
+
 Each phase ships behind the same PR-per-phase, CI-green rhythm as the rest of the project. The Streamlit UI kept working until step 6, so the tool was never broken mid-build.
 
 ## 8. Honest hard parts
@@ -132,5 +141,9 @@ Each phase ships behind the same PR-per-phase, CI-green rhythm as the rest of th
 **Search is substring, not semantic.** The timeline's search matches literal text in titles, outcomes, and intents. It is instant and needs no model, which is the point — but "class imbalance" will not find an entry that only ever says "the minority class was ignored". The vector store already holds journal embeddings for chat retrieval; wiring it into the timeline search as a second, slower pass is the obvious next step. Substring search first because it answers most lookups and costs nothing.
 
 **Filters do not survive a restart.** Kind chips, time range, and the search box reset when the window closes. Persisting them (or putting them in the URL) is cheap and has not been done.
+
+**Answers arrive whole, not streamed.** `POST /api/chat` returns once the model is finished, so a long answer shows nothing until all of it exists. A cancel button and an elapsed-seconds counter make the wait honest, which is most of the benefit for a fraction of the work — real streaming needs SSE through FastAPI, the provider, and React, the same plumbing the live tail has not yet justified.
+
+**The frontend has no test suite.** `markdown.tsx` is hand-rolled parsing and the riskiest logic in the UI; it was verified against adversarial fixtures in a browser, not by tests. Adding vitest is a toolchain decision worth making deliberately rather than smuggling into a UX change.
 
 Genuinely out of scope for cockpit v1: in-app code editing and execution; multiple projects open at once; team/collaboration mode; Zotero sync; MLflow parsing; methods-section drafting; the contradiction detector.

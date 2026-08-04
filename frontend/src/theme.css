@@ -664,6 +664,68 @@ body {
   color: var(--muted);
   font-style: italic;
 }
+
+/* Rendered markdown in an answer. */
+.md > :first-child {
+  margin-top: 0;
+}
+.md > :last-child {
+  margin-bottom: 0;
+}
+.md p {
+  margin: 0 0 10px;
+}
+.md ul,
+.md ol {
+  margin: 0 0 10px;
+  padding-left: 22px;
+}
+.md li {
+  margin-bottom: 4px;
+}
+.md-h {
+  font-family: var(--serif);
+  font-weight: 500;
+  color: var(--sand);
+  margin: 14px 0 6px;
+  line-height: 1.3;
+}
+h1.md-h {
+  font-size: 19px;
+}
+h2.md-h {
+  font-size: 17px;
+}
+h3.md-h,
+h4.md-h,
+h5.md-h,
+h6.md-h {
+  font-size: 15px;
+}
+.md strong {
+  color: var(--sand);
+  font-weight: 600;
+}
+.md-code {
+  font-family: var(--mono);
+  font-size: 0.87em;
+  background: var(--panel-2);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.md-pre {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  background: var(--kohl);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 0 0 10px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .cites {
   display: flex;
   flex-wrap: wrap;
@@ -678,6 +740,11 @@ body {
   color: var(--gold);
   background: transparent;
   cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
 }
 .cite:hover {
   background: rgba(201, 162, 39, 0.12);
@@ -689,11 +756,12 @@ body {
 }
 .chat-input {
   display: flex;
+  align-items: flex-end;
   gap: 8px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
-.chat-input input {
+.chat-input textarea {
   flex: 1;
   background: var(--panel);
   border: 1px solid var(--border);
@@ -702,8 +770,12 @@ body {
   color: var(--sand);
   font-family: var(--sans);
   font-size: 14px;
+  line-height: 1.5;
+  resize: none;
+  overflow-y: auto;
+  max-height: 160px;
 }
-.chat-input input:focus {
+.chat-input textarea:focus {
   outline: none;
   border-color: var(--gold);
 }
@@ -712,14 +784,19 @@ body {
   color: var(--kohl);
   border: none;
   border-radius: 8px;
-  padding: 0 16px;
+  padding: 9px 16px;
   font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
 }
 .chat-input button.ghost {
   background: transparent;
   color: var(--muted);
   border: 1px solid var(--border);
+}
+.chat-input button.danger {
+  background: var(--rubric);
+  color: var(--sand);
 }
 .chat-input button:disabled {
   opacity: 0.5;
