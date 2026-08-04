@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { getStatus, getTimeline, type Status, type TimelineItem } from "./api";
+import { useEffect, useState } from "react";
+import { getStatus, type Status } from "./api";
 import { Chat } from "./Chat";
 import { Code } from "./Code";
 import { Data } from "./Data";
@@ -19,8 +19,9 @@ const TITLES: Record<View, [string, string]> = {
 
 const PLACES: View[] = ["timeline", "chat", "papers", "code", "data"];
 
-// Chat and Code manage their own internal scrolling; the rest scroll as a page.
-const SELF_SCROLLING: View[] = ["chat", "code"];
+// These manage their own internal scrolling — the timeline so its filter bar
+// stays put while the feed moves under it. The rest scroll as a page.
+const SELF_SCROLLING: View[] = ["timeline", "chat", "code"];
 
 const SKELETON_WIDTHS = [90, 72, 84, 60];
 
@@ -40,8 +41,6 @@ function Skeleton() {
 
 export function App() {
   const [status, setStatus] = useState<Status | null>(null);
-  const [items, setItems] = useState<TimelineItem[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("timeline");
   const [highlight, setHighlight] = useState<number | null>(null);
   // Held until the first poll resolves, so the skeleton stands in for the feed
@@ -50,7 +49,6 @@ export function App() {
   // Flips each view change so the enter animation restarts even when React
   // reuses the wrapper element.
   const [viewChanges, setViewChanges] = useState(0);
-  const refresh = useRef<() => void>(() => {});
 
   const show = (next: View) => {
     setView(next);
@@ -66,20 +64,16 @@ export function App() {
     let alive = true;
     const tick = async () => {
       try {
-        const [s, t] = await Promise.all([getStatus(), getTimeline()]);
-        if (!alive) return;
-        setStatus(s);
-        setItems(t);
-        setError(null);
-      } catch (e) {
-        if (alive) setError(String(e));
+        const s = await getStatus();
+        if (alive) setStatus(s);
+      } catch {
+        /* the timeline surfaces an unreachable API; the footer just waits */
       } finally {
         if (alive) setBooting(false);
       }
     };
-    refresh.current = tick;
     tick();
-    const id = setInterval(tick, 5000); // simple live tail; SSE comes later
+    const id = setInterval(tick, 5000);
     return () => {
       alive = false;
       clearInterval(id);
@@ -128,20 +122,7 @@ export function App() {
               <Skeleton />
             ) : (
               <>
-                {view === "timeline" &&
-                  (error ? (
-                    <div className="empty">
-                      Can't reach the Seshat API. Is the cockpit server running?
-                      <br />
-                      <span className="mono">{error}</span>
-                    </div>
-                  ) : (
-                    <Timeline
-                      items={items}
-                      highlightId={highlight}
-                      onIntentChange={() => refresh.current()}
-                    />
-                  ))}
+                {view === "timeline" && <Timeline highlightId={highlight} />}
                 {view === "chat" && <Chat onCite={jumpToSession} />}
                 {view === "papers" && <Papers />}
                 {view === "code" && <Code onCite={jumpToSession} />}
