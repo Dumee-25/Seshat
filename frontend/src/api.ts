@@ -30,11 +30,16 @@ async function getJSON<T>(path: string): Promise<T> {
 }
 
 /** POST JSON, surfacing FastAPI's `detail` as the error message when there is one. */
-async function postJSON<T>(path: string, body: unknown): Promise<T> {
+async function postJSON<T>(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
   const res = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal,
   });
   if (!res.ok) {
     let detail = `${res.status}`;
@@ -131,8 +136,8 @@ export const getChatHistory = () =>
     (r) => r.messages,
   );
 
-export const postChat = (question: string) =>
-  postJSON<ChatResponse>("/api/chat", { question });
+export const postChat = (question: string, signal?: AbortSignal) =>
+  postJSON<ChatResponse>("/api/chat", { question }, signal);
 
 /** Confirm an inferred intent (omit `intent`) or correct it (pass the new text). */
 export const setIntent = (entryId: number, intent?: string) =>
@@ -158,6 +163,13 @@ export const getPapers = () =>
 export const getPaper = (id: number) => getJSON<PaperDetail>(`/api/papers/${id}`);
 
 export const addLink = (url: string) => postJSON<PaperListItem>("/api/links", { url });
+
+/**
+ * Open a link in the system browser. The desktop window has no chrome, so
+ * following a link in place strands the user with no way back.
+ */
+export const openExternal = (url: string) =>
+  postJSON<{ opened: string }>("/api/open-external", { url });
 
 export interface FileNode {
   name: string;
