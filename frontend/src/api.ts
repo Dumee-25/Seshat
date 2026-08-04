@@ -21,6 +21,16 @@ export interface Status {
   sessions: number;
   queued: number;
   papers: number;
+  /** True only when something is queued and the GPU is under load. */
+  gpu_busy: boolean;
+  cpu_fallback: boolean;
+}
+
+export interface SetupStatus {
+  ollama_installed: boolean;
+  ollama_running: boolean;
+  missing_models: string[];
+  ok: boolean;
 }
 
 async function getJSON<T>(path: string): Promise<T> {
@@ -54,6 +64,8 @@ async function postJSON<T>(
 }
 
 export const getStatus = () => getJSON<Status>("/api/status");
+
+export const getSetup = () => getJSON<SetupStatus>("/api/setup");
 
 export interface TimelineQuery {
   kinds?: string[];
@@ -142,6 +154,10 @@ export const postChat = (question: string, signal?: AbortSignal) =>
 /** Confirm an inferred intent (omit `intent`) or correct it (pass the new text). */
 export const setIntent = (entryId: number, intent?: string) =>
   postJSON<IntentResult>(`/api/entries/${entryId}/intent`, { intent: intent ?? null });
+
+/** Undo a confirm or correct, putting the model's own guess back. */
+export const resetIntent = (entryId: number) =>
+  postJSON<IntentResult>(`/api/entries/${entryId}/intent/reset`, {});
 
 export const clearChat = () => fetch("/api/chat/clear", { method: "POST" });
 

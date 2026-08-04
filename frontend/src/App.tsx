@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { getStatus, type Status } from "./api";
+import { getSetup, getStatus, type SetupStatus, type Status } from "./api";
 import { Chat } from "./Chat";
 import { Code } from "./Code";
 import { Data } from "./Data";
+import { Health } from "./Health";
 import { ICONS, Star } from "./icons";
 import { Papers } from "./Papers";
 import { Timeline } from "./Timeline";
@@ -25,6 +26,11 @@ const SELF_SCROLLING: View[] = ["timeline", "chat", "code"];
 
 const SKELETON_WIDTHS = [90, 72, 84, 60];
 
+const POLL_MS = 5000;
+// Ollama's state changes on human timescales, and the check reaches out over
+// HTTP — no reason to ask as often as we ask the store.
+const SETUP_POLL_MS = 30000;
+
 function Skeleton() {
   return (
     <div className="skeleton">
@@ -39,8 +45,50 @@ function Skeleton() {
   );
 }
 
+/** What the last poll actually did, rather than what it once managed to do. */
+type Link = "connecting" | "live" | "lost";
+
+function StatusBar({ link, status }: { link: Link; status: Status | null }) {
+  const label =
+    link === "live" ? "Connected" : link === "lost" ? "Not responding" : "Connecting…";
+
+  // A queue that isn't draining looks broken unless it says why.
+  let queuedNote = "";
+  if (status && status.queued > 0) {
+    queuedNote = status.gpu_busy
+      ? " · waiting for the GPU"
+      : status.cpu_fallback
+        ? " · processing on CPU"
+        : " · processing";
+  }
+
+  return (
+    <footer className="statusbar">
+      <span>
+        <span className={`dot ${link}`} />
+        {label}
+      </span>
+      {status && <span>{status.sessions} sessions</span>}
+      {status && (
+        <span
+          title={
+            status.queued === 0
+              ? "Every captured session has a journal entry."
+              : "Sessions captured but not yet journaled. Seshat waits for the GPU to be idle so it never competes with a training run."
+          }
+        >
+          {status.queued} queued{queuedNote}
+        </span>
+      )}
+      {status && <span>{status.papers} papers</span>}
+    </footer>
+  );
+}
+
 export function App() {
   const [status, setStatus] = useState<Status | null>(null);
+  const [link, setLink] = useState<Link>("connecting");
+  const [setup, setSetup] = useState<SetupStatus | null>(null);
   const [view, setView] = useState<View>("timeline");
   const [highlight, setHighlight] = useState<number | null>(null);
   // Held until the first poll resolves, so the skeleton stands in for the feed
@@ -65,15 +113,33 @@ export function App() {
     const tick = async () => {
       try {
         const s = await getStatus();
-        if (alive) setStatus(s);
+        if (!alive) return;
+        setStatus(s);
+        setLink("live");
       } catch {
-        /* the timeline surfaces an unreachable API; the footer just waits */
+        // Keep the last counts on screen — they are the most recent truth we
+        // have — but stop claiming the connection is up.
+        if (alive) setLink("lost");
       } finally {
         if (alive) setBooting(false);
       }
     };
     tick();
-    const id = setInterval(tick, 5000);
+    const id = setInterval(tick, POLL_MS);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    const tick = () =>
+      getSetup()
+        .then((s) => alive && setSetup(s))
+        .catch(() => {}); // the status bar already reports an unreachable API
+    tick();
+    const id = setInterval(tick, SETUP_POLL_MS);
     return () => {
       alive = false;
       clearInterval(id);
@@ -85,7 +151,7 @@ export function App() {
   return (
     <div className="app">
       <div className="app-body">
-        <aside className="sidebar">
+        <nav className="sidebar" aria-label="Views">
           <div className="brand">
             <Star />
             <span className="wordmark">SESHAT</span>
@@ -93,26 +159,28 @@ export function App() {
           {PLACES.map((id) => {
             const Icon = ICONS[id];
             return (
-              <div
+              <button
                 key={id}
                 className={`nav-item${view === id ? " active" : ""}`}
+                aria-current={view === id ? "page" : undefined}
                 onClick={() => show(id)}
-                title={TITLES[id][0]}
               >
                 <span className="nav-icon">
                   <Icon />
                 </span>
                 <span>{TITLES[id][0]}</span>
-              </div>
+              </button>
             );
           })}
-        </aside>
+        </nav>
 
         <main className="main">
           <h1 className="view-title">{TITLES[view][0]}</h1>
           <div className="view-sub">
             {status ? status.project : "…"} · {TITLES[view][1]}
           </div>
+
+          {setup && !setup.ok && <Health setup={setup} />}
 
           <div
             key={viewChanges}
@@ -133,15 +201,7 @@ export function App() {
         </main>
       </div>
 
-      <footer className="statusbar">
-        <span>
-          <span className="dot" />
-          {status ? "Connected" : "Connecting…"}
-        </span>
-        {status && <span>{status.sessions} sessions</span>}
-        {status && <span>{status.queued} queued</span>}
-        {status && <span>{status.papers} papers</span>}
-      </footer>
+      <StatusBar link={link} status={status} />
     </div>
   );
 }

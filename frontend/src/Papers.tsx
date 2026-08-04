@@ -7,6 +7,7 @@ import {
   type PaperDetail,
   type PaperListItem,
 } from "./api";
+import { Failed } from "./Failed";
 
 function when(ts: string | null): string {
   if (!ts) return "";
@@ -22,11 +23,19 @@ export function Papers() {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // True once the list has loaded at least once. Until then a failure means
+  // the panel has nothing to show, and must say so rather than claim the
+  // project has no papers.
+  const [loaded, setLoaded] = useState(false);
 
   const load = () =>
     getPapers()
-      .then(setPapers)
-      .catch((e) => setError(String(e)));
+      .then((p) => {
+        setPapers(p);
+        setLoaded(true);
+        setError(null);
+      })
+      .catch((e) => setError(String(e instanceof Error ? e.message : e)));
   useEffect(() => {
     load();
   }, []);
@@ -81,6 +90,8 @@ export function Papers() {
     );
   }
 
+  if (!loaded && error) return <Failed what="papers and links" detail={error} />;
+
   return (
     <div>
       <div className="addbar">
@@ -97,13 +108,14 @@ export function Papers() {
       {error && <div className="chat-error">{error}</div>}
       {papers.length === 0 ? (
         <div className="empty">
-          No papers or links yet. Drop PDFs into the project's papers folder, or
-          paste a URL above.
+          {loaded
+            ? "No papers or links yet. Drop PDFs into the project's papers folder, or paste a URL above."
+            : "Loading…"}
         </div>
       ) : (
         <div className="paper-list">
           {papers.map((p) => (
-            <div
+            <button
               key={p.id}
               className="paper-row"
               onClick={() => {
@@ -114,7 +126,7 @@ export function Papers() {
               <span className={`src ${p.source}`}>{p.source}</span>
               <span className="paper-title">{p.title || p.path}</span>
               <span className="paper-date">{when(p.added_at)}</span>
-            </div>
+            </button>
           ))}
         </div>
       )}

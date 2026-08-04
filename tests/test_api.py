@@ -49,6 +49,63 @@ def test_status_counts(client):
     assert body["papers"] == 1
 
 
+def queued_client(tmp_path: Path, busy: bool):
+    """A project with one session still awaiting journaling."""
+    write_default_config(tmp_path)
+    config = load_config(tmp_path)
+    with Store.open(tmp_path) as store:
+        store.close_session(store.create_session(started_at="2026-03-01T09:00:00+00:00"))
+    return TestClient(create_app(tmp_path, config, busy_check=lambda: busy))
+
+
+def test_status_reports_a_busy_gpu_behind_a_stalled_queue(tmp_path: Path):
+    body = queued_client(tmp_path, busy=True).get("/api/status").json()
+    assert body["queued"] == 1
+    assert body["gpu_busy"] is True
+
+
+def test_status_reports_an_idle_gpu(tmp_path: Path):
+    body = queued_client(tmp_path, busy=False).get("/api/status").json()
+    assert body["queued"] == 1
+    assert body["gpu_busy"] is False
+
+
+def test_status_skips_the_gpu_check_when_nothing_is_queued(client):
+    """Nothing is waiting, so the GPU's state is not a reason for anything."""
+    api, _ = client
+    assert api.get("/api/status").json()["gpu_busy"] is False
+
+
+def test_setup_endpoint_reports_a_healthy_ollama(tmp_path: Path):
+    from seshat.app.setup import SetupReport
+
+    write_default_config(tmp_path)
+    config = load_config(tmp_path)
+    api = TestClient(create_app(
+        tmp_path, config,
+        setup_check=lambda: SetupReport(True, True, present_models=["qwen3:8b"]),
+    ))
+    assert api.get("/api/setup").json() == {
+        "ollama_installed": True, "ollama_running": True,
+        "missing_models": [], "ok": True,
+    }
+
+
+def test_setup_endpoint_reports_what_is_missing(tmp_path: Path):
+    from seshat.app.setup import SetupReport
+
+    write_default_config(tmp_path)
+    config = load_config(tmp_path)
+    api = TestClient(create_app(
+        tmp_path, config,
+        setup_check=lambda: SetupReport(True, False, missing=["qwen3:8b", "nomic-embed-text"]),
+    ))
+    body = api.get("/api/setup").json()
+    assert body["ok"] is False
+    assert body["ollama_running"] is False
+    assert body["missing_models"] == ["qwen3:8b", "nomic-embed-text"]
+
+
 def test_timeline_endpoint(client):
     api, sid = client
     items = api.get("/api/timeline").json()["items"]
@@ -138,6 +195,38 @@ def test_correcting_intent_records_a_correction(client):
     entry = api.get(f"/api/sessions/{sid}").json()["entries"][0]
     assert entry["inferred_intent"] == "recall was capped"
     assert entry["intent_status"] == "corrected"
+
+
+def test_reset_undoes_a_correction(client):
+    api, sid = client
+    eid = entry_id_of(api)
+    api.post(f"/api/entries/{eid}/intent", json={"intent": "recall was capped"})
+    body = api.post(f"/api/entries/{eid}/intent/reset").json()
+    assert body == {"id": eid, "intent": "class imbalance", "intent_status": "inferred"}
+    entry = api.get(f"/api/sessions/{sid}").json()["entries"][0]
+    assert entry["inferred_intent"] == "class imbalance"
+    assert entry["intent_status"] == "inferred"
+
+
+def test_reset_undoes_a_confirmation(client):
+    api, _ = client
+    eid = entry_id_of(api)
+    api.post(f"/api/entries/{eid}/intent", json={})
+    assert api.post(f"/api/entries/{eid}/intent/reset").json()["intent_status"] == "inferred"
+
+
+def test_reset_can_be_repeated(client):
+    """Triage is fast and clicky; undoing twice must not become an error."""
+    api, _ = client
+    eid = entry_id_of(api)
+    api.post(f"/api/entries/{eid}/intent", json={"intent": "wrong"})
+    assert api.post(f"/api/entries/{eid}/intent/reset").status_code == 200
+    assert api.post(f"/api/entries/{eid}/intent/reset").status_code == 200
+
+
+def test_reset_unknown_entry_is_404(client):
+    api, _ = client
+    assert api.post("/api/entries/9999/intent/reset").status_code == 404
 
 
 def test_resubmitting_the_same_text_is_a_confirmation(client):

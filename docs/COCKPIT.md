@@ -64,7 +64,10 @@ Built, as of phase 6:
 
 ```
 GET  /api/health                     liveness, for the window's readiness probe
-GET  /api/status                     watcher state, queued count (polled)
+GET  /api/status                     watcher state, queued count, and whether
+                                     a busy GPU is what is holding the queue
+GET  /api/setup                      is Ollama reachable, which models are
+                                     missing (read-only; never pulls)
 GET  /api/timeline?since=&kinds=     merged activity feed; also `q` (text search
      &q=&limit=&offset=              over titles, outcomes, and intents),
                                      `limit`/`offset`, and a `total` in the
@@ -83,6 +86,7 @@ GET  /api/files/history?path=        one file's change history
 GET  /api/data                       results/artifacts
 GET  /api/data/{id}                  artifact preview + producing sessions
 POST /api/entries/{id}/intent        confirm / correct an inferred intent
+POST /api/entries/{id}/intent/reset  undo that, restoring the model's guess
 ```
 
 Still deferred:
@@ -126,6 +130,16 @@ Highest reuse and value first, so the cockpit feels real early.
    - **The input is multi-line** (Enter sends, Shift+Enter breaks).
    - **Reader links open in the system browser** via `POST /api/open-external`. The desktop window has no chrome, so following a link in place replaced the cockpit with a web page the user could not get back from.
 
+9. ~~**Say what is actually happening.**~~ *Done.* The cockpit was confidently wrong in several places at once:
+   - **The status bar told the truth.** A failed poll left the stale status in place, so the footer kept saying "Connected" with a cheerfully pulsing dot while nothing was reaching the server. It now reports the *last poll*, keeps the last known counts (they are still the most recent truth), and colours the dot accordingly.
+   - **A stalled queue explains itself.** `/api/status` reports whether a busy GPU is the reason nothing is draining, so "3 queued" that never moves during a training run reads as the design working rather than the tool being broken.
+   - **Panels stopped swallowing failures.** `Code` and `Data` caught errors into `() => {}`, so a dead backend rendered as "No watched code files" — asserting the opposite of the truth. Every panel now distinguishes "could not load" from "nothing here", and a load failure never falls through to an empty state.
+   - **A broken install is visible.** `GET /api/setup` (read-only; it never pulls) backs a banner naming what is wrong and the command that fixes it. Journaling fails silently by design, because capture must survive it — this is what stops that silence from looking like nothing happening.
+   - **Everything is keyboard reachable.** Nav entries and every row are real `<button>`s with focus styling and ARIA state, not `div`s with `onClick`.
+   - **Triage is cheap and reversible.** Timeline rows take focus; `↑↓`/`j`/`k` move, `c` confirms, `e` edits, `u` undoes, `Enter` opens the evidence. Undo is backed by schema v7 (below).
+
+   **Schema v7 — `entries.model_intent`.** Correcting an intent used to overwrite `inferred_intent`, destroying what the model had actually guessed. That made corrections irreversible and quietly cost the audit trail its ground truth. The model's guess is now stored separately, written once at entry creation and never again.
+
 Each phase ships behind the same PR-per-phase, CI-green rhythm as the rest of the project. The Streamlit UI kept working until step 6, so the tool was never broken mid-build.
 
 ## 8. Honest hard parts
@@ -143,6 +157,10 @@ Each phase ships behind the same PR-per-phase, CI-green rhythm as the rest of th
 **Filters do not survive a restart.** Kind chips, time range, and the search box reset when the window closes. Persisting them (or putting them in the URL) is cheap and has not been done.
 
 **Answers arrive whole, not streamed.** `POST /api/chat` returns once the model is finished, so a long answer shows nothing until all of it exists. A cancel button and an elapsed-seconds counter make the wait honest, which is most of the benefit for a fraction of the work — real streaming needs SSE through FastAPI, the provider, and React, the same plumbing the live tail has not yet justified.
+
+**There is no "process now" button, deliberately.** Surfacing *why* the queue is stalled was the easy half; letting the cockpit drain it is not. `InferenceWorker.run_pending` has no claim on a session — `generate_entry` reads a closed session and writes an entry unconditionally — so a second worker triggered from the API would race the watcher's own 30-second drain and write two entries for one session. Making that safe needs a lease on the queue (claim `closed` → `processing` and hand stranded claims back after a crash), which is a change to the queue's contract, not a UI affordance. Until then the cockpit reports the state and `seshat process --force` remains the way to override it.
+
+**Opening a project from the window is still unbuilt** (§6). The health banner tells a user what is wrong with their *install*; it does not help them point the cockpit at a different folder.
 
 **The frontend has no test suite.** `markdown.tsx` is hand-rolled parsing and the riskiest logic in the UI; it was verified against adversarial fixtures in a browser, not by tests. Adding vitest is a toolchain decision worth making deliberately rather than smuggling into a UX change.
 

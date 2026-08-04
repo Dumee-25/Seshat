@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getTimeline,
+  resetIntent,
   setIntent,
   type IntentStatus,
   type TimelineItem,
@@ -125,34 +126,25 @@ function useDebounced<T>(value: T, ms: number): T {
   return settled;
 }
 
-function IntentControls({
-  item,
-  onChange,
-}: {
-  item: TimelineItem;
-  onChange: () => void;
-}) {
+/**
+ * The review actions for one entry, held outside the controls so the row can
+ * drive them from the keyboard as well as from its buttons.
+ */
+function useIntent(item: TimelineItem, onChange: () => void) {
   const entryId = item.meta.entry_id as number | undefined;
   const intent = item.meta.intent as string | null | undefined;
   const status = item.meta.intent_status as IntentStatus | undefined;
 
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!intent || !status) return null;
-
-  const conf = item.meta.intent_confidence as number | null | undefined;
-  const label =
-    status === "inferred" && conf != null ? `inferred · ${conf.toFixed(1)}` : status;
-
-  const save = async (text?: string) => {
+  const run = async (action: () => Promise<unknown>) => {
     if (entryId == null) return;
     setBusy(true);
     setError(null);
     try {
-      await setIntent(entryId, text);
+      await action();
       setEditing(false);
       onChange();
     } catch (e) {
@@ -162,53 +154,109 @@ function IntentControls({
     }
   };
 
-  const editable = status === "inferred" && entryId != null;
+  return {
+    intent,
+    status,
+    editing,
+    setEditing,
+    busy,
+    error,
+    reviewable: entryId != null && !!intent && !!status,
+    unreviewed: status === "inferred",
+    confidence: item.meta.intent_confidence as number | null | undefined,
+    confirm: () => run(() => setIntent(entryId!)),
+    correct: (text: string) => run(() => setIntent(entryId!, text)),
+    undo: () => run(() => resetIntent(entryId!)),
+  };
+}
+
+type Intent = ReturnType<typeof useIntent>;
+
+function IntentControls({ ctl }: { ctl: Intent }) {
+  const [draft, setDraft] = useState("");
+
+  // The editor can be opened by key as well as by click, so the draft is
+  // seeded on open rather than by whichever button did the opening.
+  useEffect(() => {
+    if (ctl.editing) setDraft(ctl.intent ?? "");
+  }, [ctl.editing, ctl.intent]);
+
+  if (!ctl.reviewable) return null;
+
+  const label =
+    ctl.unreviewed && ctl.confidence != null
+      ? `inferred · ${ctl.confidence.toFixed(1)}`
+      : ctl.status;
 
   return (
     <>
-      <span className={`badge ${status}`}>{label}</span>
-      {editable && !editing && (
+      <span className={`badge ${ctl.status}`}>{label}</span>
+      {ctl.unreviewed && !ctl.editing && (
         <>
-          <button className="link-btn confirm" disabled={busy} onClick={() => save()}>
+          <button
+            className="link-btn confirm"
+            disabled={ctl.busy}
+            onClick={ctl.confirm}
+          >
             confirm
           </button>
           <button
             className="link-btn"
-            disabled={busy}
-            onClick={() => {
-              setDraft(intent);
-              setEditing(true);
-            }}
+            disabled={ctl.busy}
+            onClick={() => ctl.setEditing(true)}
           >
             edit
           </button>
         </>
       )}
-      {editing && (
+      {/* A third of guesses are expected to be wrong, so triage is fast and
+          clicky — which is only safe if the click is reversible. */}
+      {!ctl.unreviewed && (
+        <button className="link-btn" disabled={ctl.busy} onClick={ctl.undo}>
+          undo
+        </button>
+      )}
+      {ctl.editing && (
         <div className="intent-editor">
           <textarea
             value={draft}
             autoFocus
             onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") ctl.setEditing(false);
+            }}
             placeholder="What were you actually trying to do?"
           />
           <div className="intent-actions">
             <button
               className="primary"
-              disabled={busy || !draft.trim()}
-              onClick={() => save(draft)}
+              disabled={ctl.busy || !draft.trim()}
+              onClick={() => ctl.correct(draft)}
             >
               Save
             </button>
-            <button className="ghost" disabled={busy} onClick={() => setEditing(false)}>
+            <button
+              className="ghost"
+              disabled={ctl.busy}
+              onClick={() => ctl.setEditing(false)}
+            >
               Cancel
             </button>
           </div>
-          {error && <div className="chat-error">{error}</div>}
+          {ctl.error && <div className="chat-error">{ctl.error}</div>}
         </div>
       )}
+      {!ctl.editing && ctl.error && <div className="chat-error">{ctl.error}</div>}
     </>
   );
+}
+
+/** Move focus to the next/previous row, so triage never needs the mouse. */
+function focusSibling(from: HTMLElement, delta: number) {
+  const rows = [...document.querySelectorAll<HTMLElement>(".row[tabindex]")];
+  const next = rows[rows.indexOf(from) + delta];
+  next?.focus();
+  next?.scrollIntoView({ block: "nearest" });
 }
 
 function Row({
@@ -228,15 +276,52 @@ function Row({
 }) {
   const why = item.meta.intent as string | null | undefined;
   const isSession = item.kind === "session";
+  const ctl = useIntent(item, onIntentChange);
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    // Only when the row itself has focus — never steal keys from the intent
+    // editor or from a button inside the row.
+    if (e.target !== e.currentTarget) return;
+    const row = e.currentTarget;
+    switch (e.key) {
+      case "ArrowDown":
+      case "j":
+        e.preventDefault();
+        return focusSibling(row, 1);
+      case "ArrowUp":
+      case "k":
+        e.preventDefault();
+        return focusSibling(row, -1);
+      case "Enter":
+      case " ":
+        if (!isSession) return;
+        e.preventDefault();
+        return onToggle();
+    }
+    if (!ctl.reviewable || ctl.busy) return;
+    if (e.key === "c" && ctl.unreviewed) {
+      e.preventDefault();
+      ctl.confirm();
+    } else if (e.key === "e" && ctl.unreviewed) {
+      e.preventDefault();
+      ctl.setEditing(true);
+    } else if (e.key === "u" && !ctl.unreviewed) {
+      e.preventDefault();
+      ctl.undo();
+    }
+  };
+
   return (
     <div
       id={isSession ? `tl-session-${item.id}` : undefined}
       className={`row${highlighted ? " highlighted" : ""}${flashing ? " flashing" : ""}`}
       style={{ ["--marker" as string]: MARKER[item.kind] }}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
     >
       <div className="row-head">
         <span className="row-kind">{item.kind}</span>
-        {isSession && <IntentControls item={item} onChange={onIntentChange} />}
+        {isSession && <IntentControls ctl={ctl} />}
         <span className="row-time">{timeLabel(item.ts)}</span>
       </div>
       <div className="row-title">{item.title}</div>
@@ -373,6 +458,9 @@ export function Timeline({ highlightId }: { highlightId?: number | null }) {
           </option>
         ))}
       </select>
+      <span className="tl-keys" aria-hidden="true">
+        ↑↓ move · c confirm · e edit · u undo
+      </span>
     </div>
   );
 
