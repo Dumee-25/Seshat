@@ -40,6 +40,10 @@ towards the things that were hardest to get right rather than towards coverage:
 Vitest is pinned to the same major as Vite so tests and the build share one
 toolchain; bumping one means bumping the other.
 
+Running the tests needs **Node >= 22.22.2** (jsdom's floor, declared in
+`engines`). Building does not — an older Node still produces the bundle, it
+just cannot run the suite.
+
 ## Build
 
 ```

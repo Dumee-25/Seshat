@@ -18,7 +18,7 @@ the Python package. Everything here runs on Windows; there is no cross-compile.
   so building out of Anaconda base drags jupyterlab, bokeh, scipy, and the rest
   of the scientific stack into the analysis — the build crawls and the bundle
   bloats. A dedicated venv holds ~38 packages and freezes in about a minute.
-- [Node.js](https://nodejs.org) on PATH, to build the React cockpit that gets bundled into the exe.
+- [Node.js](https://nodejs.org) on PATH, to build the React cockpit that gets bundled into the exe. Any recent version builds; running the cockpit's own test suite needs Node 22.22.2 or newer.
 - [Inno Setup 6](https://jrsoftware.org/isinfo.php) for the installer (optional; the onedir app builds without it).
 - [Ollama](https://ollama.com) is a runtime dependency, not bundled. The app's first-run `seshat setup` detects it and pulls the models.
 
