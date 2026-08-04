@@ -131,6 +131,7 @@ All Seshat state lives in `.seshat/` inside the project, which is gitignored by 
 - **Raw events are append-only.** Journal entries are derived data and can always be regenerated; the diffs themselves never lie and are never mutated.
 - **Wrong guesses are cheap.** Roughly a third of intent inferences are expected to be wrong early on. Every guess is labeled as such, correctable in one click, and even a wrong entry remains searchable by its factual content.
 - **Capture never dies.** Failures in journaling, embeddings, or individual files are logged and retried; the watcher keeps running.
+- **Journaling work is leased.** The desktop app journals in the background, and `seshat process` is a command you can run at the same time. Each session is claimed before it is written, so two Seshat processes never produce two entries for one session -- and a claim left behind by a crash expires rather than stranding the work.
 - **The honest metric.** If `seshat stats` does not show voluntary queries rising week over week, the capture layer is not earning its keep.
 
 ## Development
