@@ -176,6 +176,21 @@ MIGRATIONS: list[str] = [
     ALTER TABLE entries ADD COLUMN model_intent TEXT;
     UPDATE entries SET model_intent = inferred_intent;
     """,
+    # v8: a lease on journaling, so two workers cannot drain the same session.
+    # Nothing claimed the queue before this: `seshat app`'s watcher and a
+    # `seshat process` run in a terminal would both pick up the same closed
+    # session and each write an entry for it.
+    #
+    # The lease is a timestamp rather than a 'processing' status on purpose.
+    # `sessions` is referenced by raw_events and entries with foreign_keys ON,
+    # so widening its CHECK constraint would mean a drop-and-rebuild of a
+    # parent table; and every existing reader of `status` ('closed' means
+    # queued) keeps working untouched. A claim is stale once it is older than
+    # the lease, which is what lets a crashed worker's sessions be picked up
+    # again without a separate recovery pass.
+    """
+    ALTER TABLE sessions ADD COLUMN claimed_at TEXT;
+    """,
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)
@@ -196,6 +211,9 @@ class Session:
     started_at: str
     ended_at: str | None = None
     status: str = "open"
+    # When a worker took the journaling lease on this session, if one holds it.
+    # Stale once older than the lease window; see Store.claim_session.
+    claimed_at: str | None = None
     id: int | None = None
 
 

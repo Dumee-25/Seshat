@@ -189,3 +189,100 @@ def test_provider_failure_keeps_session_queued(env):
 
     worker = InferenceWorker(store, vectors, FakeProvider(), busy_check=lambda: False)
     assert worker.run_pending() == 1  # recovers on the next run
+
+
+# -- the journaling lease ------------------------------------------------------
+
+
+def test_a_second_worker_starting_mid_generation_writes_nothing(env):
+    """The bug the lease exists for, in the shape it actually happens.
+
+    Running the workers one after another proves nothing: the first marks the
+    session processed before the second looks. The race is a second worker
+    reaching the queue *while* the first is still generating — the desktop
+    app's watcher drains every ~30s, and `seshat process` is a command a user
+    can type at any moment. Without a claim, both see a 'closed' session and
+    both write an entry for it.
+    """
+    store, vectors = env
+    session_id = closed_session_with_events(store)
+    interloper = InferenceWorker(store, vectors, FakeProvider(), busy_check=lambda: False)
+    wrote: list[int] = []
+
+    class ReentrantProvider(FakeProvider):
+        def generate(self, prompt: str) -> str:
+            if not wrote:  # only on the way into the first generation
+                wrote.append(interloper.run_pending())
+            return super().generate(prompt)
+
+    worker = InferenceWorker(
+        store, vectors, ReentrantProvider(), busy_check=lambda: False
+    )
+    assert worker.run_pending() == 1
+    assert wrote == [0]  # the interloper found the session already held
+    assert len(store.entries(session_id=session_id)) == 1
+
+
+def test_a_worker_skips_a_session_another_already_holds(env):
+    store, vectors = env
+    session_id = closed_session_with_events(store)
+    # Stand in for a worker that listed the queue and then claimed first.
+    assert store.claim_session(session_id) is True
+
+    worker = InferenceWorker(store, vectors, FakeProvider(), busy_check=lambda: False)
+    assert worker.run_pending() == 0
+    assert store.entries() == []
+    assert store.get_session(session_id).status == "closed"  # still queued, not lost
+
+
+def test_a_provider_failure_hands_the_claim_back(env):
+    # Otherwise the next run would find nothing to do until the lease lapsed.
+    store, vectors = env
+    session_id = closed_session_with_events(store)
+    failing = InferenceWorker(store, vectors, FakeProvider(fail=True), busy_check=lambda: False)
+    assert failing.run_pending() == 0
+
+    assert store.get_session(session_id).claimed_at is None
+    assert [s.id for s in store.queued_sessions()] == [session_id]
+
+
+def test_an_unexpected_error_hands_the_claim_back(env):
+    store, vectors = env
+    session_id = closed_session_with_events(store)
+    worker = InferenceWorker(store, vectors, FakeProvider(), busy_check=lambda: False)
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("something nobody planned for")
+
+    import seshat.inference.queue as queue_mod
+
+    original = queue_mod.generate_entry
+    queue_mod.generate_entry = explode
+    try:
+        with pytest.raises(RuntimeError):
+            worker.run_pending()
+    finally:
+        queue_mod.generate_entry = original
+
+    assert store.get_session(session_id).claimed_at is None
+    assert [s.id for s in store.queued_sessions()] == [session_id]
+
+
+def test_a_finished_session_holds_no_claim(env):
+    store, vectors = env
+    session_id = closed_session_with_events(store)
+    InferenceWorker(store, vectors, FakeProvider(), busy_check=lambda: False).run_pending()
+
+    session = store.get_session(session_id)
+    assert session.status == "processed"
+    assert session.claimed_at is None
+
+
+def test_deferring_for_a_busy_gpu_claims_nothing(env):
+    # A worker that never ran must not leave the queue looking occupied.
+    store, vectors = env
+    session_id = closed_session_with_events(store)
+    worker = InferenceWorker(store, vectors, FakeProvider(), busy_check=lambda: True)
+
+    assert worker.run_pending() == 0
+    assert store.get_session(session_id).claimed_at is None

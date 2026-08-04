@@ -158,7 +158,7 @@ Each phase ships behind the same PR-per-phase, CI-green rhythm as the rest of th
 
 **Answers arrive whole, not streamed.** `POST /api/chat` returns once the model is finished, so a long answer shows nothing until all of it exists. A cancel button and an elapsed-seconds counter make the wait honest, which is most of the benefit for a fraction of the work — real streaming needs SSE through FastAPI, the provider, and React, the same plumbing the live tail has not yet justified.
 
-**There is no "process now" button, deliberately.** Surfacing *why* the queue is stalled was the easy half; letting the cockpit drain it is not. `InferenceWorker.run_pending` has no claim on a session — `generate_entry` reads a closed session and writes an entry unconditionally — so a second worker triggered from the API would race the watcher's own 30-second drain and write two entries for one session. Making that safe needs a lease on the queue (claim `closed` → `processing` and hand stranded claims back after a crash), which is a change to the queue's contract, not a UI affordance. Until then the cockpit reports the state and `seshat process --force` remains the way to override it.
+**There is still no "process now" button, but nothing structural is in the way now.** The reason there wasn't one is gone: the queue is leased (§11), so a second worker triggered from the API can no longer race the watcher into writing two entries for one session. What remains is ordinary UI work plus one decision — a `POST /api/process` that runs generation inside the API process ties up a request for as long as the model takes, so it wants to be fire-and-forget with the existing status poll reporting progress. Until it exists the cockpit reports the state and `seshat process --force` is the way to override it.
 
 **Opening a project from the window is still unbuilt** (§6). The health banner tells a user what is wrong with their *install*; it does not help them point the cockpit at a different folder.
 
@@ -178,3 +178,25 @@ The suite is weighted by risk rather than by coverage. Roughly a third of it is 
 Vitest is pinned to the same major as Vite so tests and the build share one toolchain. Vitest 4 pulls its own newer Vite, which would mean tests transforming code differently from `vite build`; that is worth avoiding, and worth remembering when either is upgraded.
 
 Component tests mock `api.ts` — the single module that talks HTTP — so nothing here needs a running server, and the API contract stays covered by the Python tests on the other side of it.
+
+## 11. The journaling lease
+
+Pending work is "sessions with status `closed`". Nothing claimed that queue, and `generate_entry` writes an entry unconditionally — so two workers reaching it at once produced two entries for one session, and the timeline silently showed whichever came first.
+
+This was not hypothetical, and it was not only about a future button: `seshat app` runs a worker behind the tray that drains every ~30 seconds, and `seshat process` is a command a user can type at any moment. The two are separate processes on one SQLite file.
+
+**The lease is a timestamp, not a status.** The obvious design — add `processing` to the session status — needs the `CHECK` constraint widened, and SQLite cannot alter a constraint in place. `sessions` is a parent of both `raw_events` and `entries` with `foreign_keys` ON, so that means dropping and rebuilding a referenced table. A nullable `claimed_at` column avoids all of it, and every existing reader of `status` keeps working untouched — including `mark_session_processed`, whose `WHERE status = 'closed'` guard would otherwise have had to change.
+
+Claiming is one statement, so the check and the take cannot come apart:
+
+```sql
+UPDATE sessions SET claimed_at = ?
+ WHERE id = ? AND status = 'closed'
+   AND (claimed_at IS NULL OR claimed_at <= ?)   -- the lease cutoff
+```
+
+SQLite serialises writers, so a loser sees the winner's committed claim and matches nothing; `rowcount` is the answer. Expiry lives in the same `WHERE` clause, which is why a worker that dies holding a lease needs no separate recovery pass — its sessions simply become claimable again.
+
+**The lease is deliberately long** (30 minutes). The two failure modes are not symmetric: a lease that expires *during* generation lets a second worker in and produces exactly the duplicate this exists to prevent, while one that expires later than needed only delays retrying after a crash — and journal latency is free by design, since entries are read hours after the fact.
+
+A claim taken is always handed back, including on `BaseException`, so an ordinary failure retries on the next pass instead of waiting out the lease. Deferring for a busy GPU claims nothing at all: a worker that never ran must not leave the queue looking occupied.

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import TracebackType
 
@@ -29,6 +29,20 @@ DB_FILENAME = "seshat.sqlite3"
 
 def utcnow() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def _shift(ts: str, seconds: int) -> str:
+    return (datetime.fromisoformat(ts) + timedelta(seconds=seconds)).isoformat(
+        timespec="seconds"
+    )
+
+
+# How long a worker's claim on a session stays good. Deliberately generous:
+# a lease that expires mid-generation lets a second worker in and produces the
+# duplicate entry this exists to prevent, whereas one that expires too late
+# only delays retrying a crashed worker's session -- and journal latency is
+# free by design (entries get read hours later).
+LEASE_SECONDS = 30 * 60
 
 
 class StoreError(Exception):
@@ -172,8 +186,11 @@ class Store:
         self._conn.commit()
 
     def mark_session_processed(self, session_id: int) -> None:
+        # Clearing the claim keeps a finished session from carrying a lease
+        # that means nothing; the status alone now takes it out of the queue.
         cur = self._conn.execute(
-            "UPDATE sessions SET status = 'processed' WHERE id = ? AND status = 'closed'",
+            "UPDATE sessions SET status = 'processed', claimed_at = NULL "
+            "WHERE id = ? AND status = 'closed'",
             (session_id,),
         )
         if cur.rowcount == 0:
@@ -186,11 +203,16 @@ class Store:
         ).fetchone()
         if row is None:
             raise StoreError(f"No session with id {session_id}.")
+        return self._session_from_row(row)
+
+    @staticmethod
+    def _session_from_row(row: sqlite3.Row) -> Session:
         return Session(
             id=row["id"],
             started_at=row["started_at"],
             ended_at=row["ended_at"],
             status=row["status"],
+            claimed_at=row["claimed_at"],
         )
 
     def sessions(self, status: str | None = None) -> list[Session]:
@@ -198,15 +220,50 @@ class Store:
         rows = self._conn.execute(
             f"SELECT * FROM sessions {where} ORDER BY started_at, id", params
         ).fetchall()
-        return [
-            Session(
-                id=r["id"],
-                started_at=r["started_at"],
-                ended_at=r["ended_at"],
-                status=r["status"],
-            )
-            for r in rows
-        ]
+        return [self._session_from_row(r) for r in rows]
+
+    # -- journaling lease ----------------------------------------------------
+    #
+    # Pending work is "status = 'closed'". Two workers can reach that queue at
+    # once -- the desktop app's watcher drains it every ~30s while a terminal
+    # `seshat process` can run at any moment -- and journal generation is not
+    # idempotent, so an unclaimed queue means two entries for one session.
+
+    def queued_sessions(
+        self, lease_seconds: int = LEASE_SECONDS, now: str | None = None
+    ) -> list[Session]:
+        """Closed sessions no live worker holds: the journaling queue."""
+        rows = self._conn.execute(
+            "SELECT * FROM sessions WHERE status = 'closed' "
+            "AND (claimed_at IS NULL OR claimed_at <= ?) ORDER BY started_at, id",
+            (_shift(now or utcnow(), -lease_seconds),),
+        ).fetchall()
+        return [self._session_from_row(r) for r in rows]
+
+    def claim_session(
+        self, session_id: int, lease_seconds: int = LEASE_SECONDS, now: str | None = None
+    ) -> bool:
+        """Take the journaling lease. False means someone else already holds it.
+
+        The guard lives in the UPDATE's WHERE clause so the check and the take
+        are one statement: SQLite serialises writers, so a loser sees the
+        winner's committed claim and matches nothing.
+        """
+        stamp = now or utcnow()
+        cur = self._conn.execute(
+            "UPDATE sessions SET claimed_at = ? WHERE id = ? AND status = 'closed' "
+            "AND (claimed_at IS NULL OR claimed_at <= ?)",
+            (stamp, session_id, _shift(stamp, -lease_seconds)),
+        )
+        self._conn.commit()
+        return cur.rowcount == 1
+
+    def release_session(self, session_id: int) -> None:
+        """Hand the lease back, so the session is retried without waiting it out."""
+        self._conn.execute(
+            "UPDATE sessions SET claimed_at = NULL WHERE id = ?", (session_id,)
+        )
+        self._conn.commit()
 
     def assign_events_to_session(self, event_ids: list[int], session_id: int) -> None:
         self.get_session(session_id)  # raises if missing
