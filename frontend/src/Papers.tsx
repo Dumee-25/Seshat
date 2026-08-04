@@ -3,6 +3,7 @@ import {
   addLink,
   getPaper,
   getPapers,
+  openExternal,
   type PaperDetail,
   type PaperListItem,
 } from "./api";
@@ -56,11 +57,25 @@ export function Papers() {
         <div className="reader-meta">
           <span className={`src ${selected.source}`}>{selected.source}</span>
           {selected.source === "url" ? (
-            <a href={selected.path}>{selected.path}</a>
+            // href is kept so copy-link and middle-click still work, but the
+            // click is handled: the desktop window has no back button, so
+            // following the link in place would strand the reader.
+            <a
+              href={selected.path}
+              onClick={(e) => {
+                e.preventDefault();
+                openExternal(selected.path).catch((err) =>
+                  setError(String(err instanceof Error ? err.message : err)),
+                );
+              }}
+            >
+              {selected.path}
+            </a>
           ) : (
             <span>{selected.path}</span>
           )}
         </div>
+        {error && <div className="chat-error">{error}</div>}
         <div className="reader-body">{selected.content || "(no extracted text)"}</div>
       </div>
     );
@@ -91,7 +106,10 @@ export function Papers() {
             <div
               key={p.id}
               className="paper-row"
-              onClick={() => getPaper(p.id).then(setSelected)}
+              onClick={() => {
+                setError(null); // don't carry a failed "add link" into the reader
+                getPaper(p.id).then(setSelected).catch((e) => setError(String(e)));
+              }}
             >
               <span className={`src ${p.source}`}>{p.source}</span>
               <span className="paper-title">{p.title || p.path}</span>

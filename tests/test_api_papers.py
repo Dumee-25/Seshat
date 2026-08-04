@@ -67,6 +67,48 @@ def test_add_link_conflict_maps_to_409(tmp_path: Path):
     assert api.post("/api/links", json={"url": "https://x.com"}).status_code == 409
 
 
+# -- opening a link outside the window ----------------------------------------
+
+
+def opener_client(tmp_path: Path):
+    """A client whose 'system browser' just records what it was handed."""
+    write_default_config(tmp_path)
+    config = load_config(tmp_path)
+    opened: list[str] = []
+    api = TestClient(create_app(tmp_path, config, open_url=opened.append))
+    return api, opened
+
+
+def test_open_external_hands_the_url_to_the_browser(tmp_path: Path):
+    api, opened = opener_client(tmp_path)
+    r = api.post("/api/open-external", json={"url": "https://arxiv.org/abs/1106.1813"})
+    assert r.status_code == 200
+    assert opened == ["https://arxiv.org/abs/1106.1813"]
+
+
+def test_open_external_allows_plain_http(tmp_path: Path):
+    api, opened = opener_client(tmp_path)
+    assert api.post("/api/open-external", json={"url": "http://localhost:9/x"}).status_code == 200
+    assert opened == ["http://localhost:9/x"]
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "file:///C:/Windows/System32/calc.exe",
+        "javascript:alert(1)",
+        "mailto:someone@example.com",
+        "not-a-url-at-all",
+    ],
+)
+def test_open_external_refuses_non_http_schemes(tmp_path: Path, url: str):
+    """The body reaches this from rendered page content, so only http(s) passes."""
+    api, opened = opener_client(tmp_path)
+    r = api.post("/api/open-external", json={"url": url})
+    assert r.status_code == 400
+    assert opened == []
+
+
 def test_add_link_bad_url_maps_to_400(tmp_path: Path):
     from seshat.papers.ingest import PaperIngestError
 

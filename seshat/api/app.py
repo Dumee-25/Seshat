@@ -9,9 +9,11 @@ API cross-origin.
 
 from __future__ import annotations
 
+import webbrowser
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,6 +34,10 @@ class ChatRequest(BaseModel):
 
 
 class LinkRequest(BaseModel):
+    url: str
+
+
+class OpenExternalRequest(BaseModel):
     url: str
 
 
@@ -96,10 +102,12 @@ def create_app(
     config: SeshatConfig,
     engine_cm: Callable | None = None,
     link_ingestor: Callable[[str], int | None] | None = None,
+    open_url: Callable[[str], None] | None = None,
 ) -> FastAPI:
     root = Path(root)
     engine_cm = engine_cm or (lambda: _default_engine(root, config))
     link_ingestor = link_ingestor or (lambda url: _default_link_ingestor(root, config, url))
+    open_url = open_url or webbrowser.open
     app = FastAPI(title="Seshat", version="0.1.0")
 
     # The frozen build serves same-origin, but the Vite dev server is a
@@ -346,6 +354,23 @@ def create_app(
             "added_at": paper.added_at,
             "source": "url",
         }
+
+    @app.post("/api/open-external")
+    def open_external(req: OpenExternalRequest) -> dict:
+        """Hand a link to the system browser instead of following it in place.
+
+        The desktop window has no browser chrome, so navigating it to an
+        ingested URL replaces the cockpit with a web page the user cannot get
+        back from. Only http(s) is allowed through — the request body reaches
+        this from rendered page content, and file:// or similar schemes have
+        no business being launched on its say-so.
+        """
+        if urlparse(req.url).scheme not in ("http", "https"):
+            raise HTTPException(
+                status_code=400, detail="Only http and https links can be opened."
+            )
+        open_url(req.url)
+        return {"opened": req.url}
 
     if STATIC_DIR.exists():
         from fastapi.staticfiles import StaticFiles
