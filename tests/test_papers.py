@@ -59,6 +59,134 @@ def test_extract_pdf_title_and_text(env):
     assert "synthetic examples" in text
 
 
+# -- title derivation -----------------------------------------------------------
+
+
+def laid_out_pdf(path: Path, blocks: list[tuple[str, float]], meta_title: str = "") -> Path:
+    """A PDF whose page 1 is a stack of text at chosen font sizes.
+
+    Real papers put the masthead, title, and authors at different sizes, and
+    that typography is the only reliable signal of which one is the title.
+    """
+    import math
+
+    import pymupdf
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc = pymupdf.open()
+    page = doc.new_page(width=612, height=2000)  # tall enough for any fixture
+    width = 500.0
+    y = 40.0
+    for text, size in blocks:
+        # insert_textbox silently inserts *nothing* when the text does not fit,
+        # so the box is sized from the wrapped line count rather than guessed.
+        per_line = max(int(width / (size * 0.55)), 1)
+        height = math.ceil(len(text) / per_line) * size * 1.6 + size
+        rect = pymupdf.Rect(50, y, 50 + width, y + height)
+        assert page.insert_textbox(rect, text, fontsize=size) >= 0, (
+            f"fixture text did not fit: {text[:40]!r} at {size}pt"
+        )
+        y += height + 8
+    if meta_title:
+        doc.set_metadata({"title": meta_title})
+    doc.save(path)
+    doc.close()
+    return path
+
+
+def test_good_metadata_title_is_trusted(env):
+    root, _, _ = env
+    pdf = laid_out_pdf(
+        root / "papers" / "a.pdf",
+        [("journal of things", 28), ("Some Other Heading Entirely", 18)],
+        meta_title="Hierarchical Forecasting of Dengue Incidence in Sri Lanka",
+    )
+    title, _ = extract_pdf(pdf)
+    assert title == "Hierarchical Forecasting of Dengue Incidence in Sri Lanka"
+
+
+@pytest.mark.parametrize(
+    "junk",
+    [
+        "Microsoft Word - S2 Text.docx",
+        "HDBMR_2420948 1..16",
+        "manuscript_final.pdf",
+        "G",
+        "15",
+    ],
+)
+def test_junk_metadata_titles_are_rejected(env, junk):
+    """Publishers' leftovers, which is what most PDF metadata actually holds."""
+    root, _, _ = env
+    pdf = laid_out_pdf(
+        root / "papers" / "b.pdf",
+        [("Estimating Dengue Dynamics in Colombo District", 20)],
+        meta_title=junk,
+    )
+    title, _ = extract_pdf(pdf)
+    assert title == "Estimating Dengue Dynamics in Colombo District"
+
+
+def test_title_comes_from_the_largest_text_when_metadata_is_empty(env):
+    root, _, _ = env
+    pdf = laid_out_pdf(
+        root / "papers" / "c.pdf",
+        [("Severe Dengue Epidemic in Sri Lanka", 22), ("Author One, Author Two", 10)],
+    )
+    title, _ = extract_pdf(pdf)
+    assert title == "Severe Dengue Epidemic in Sri Lanka"
+
+
+def test_a_journal_masthead_does_not_beat_the_title(env):
+    """The masthead is often set larger than the title; it is one word, so the
+    next size down wins."""
+    root, _, _ = env
+    pdf = laid_out_pdf(
+        root / "papers" / "d.pdf",
+        [("diagnostics", 36), ("Regional Variation in Dengue Virus Serotypes", 18)],
+    )
+    title, _ = extract_pdf(pdf)
+    assert title == "Regional Variation in Dengue Virus Serotypes"
+
+
+def test_a_wrapped_title_is_not_truncated_at_the_first_line(env):
+    """Taking the first text line alone cut multi-line titles in half."""
+    root, _, _ = env
+    pdf = laid_out_pdf(
+        root / "papers" / "e.pdf",
+        [("Estimating dynamics of dengue disease", 20),
+         ("in Colombo district of Sri Lanka", 20),
+         ("Author One", 9)],
+    )
+    title, _ = extract_pdf(pdf)
+    assert "Estimating dynamics of dengue disease" in title
+    assert "Colombo district of Sri Lanka" in title
+
+
+def test_article_type_label_is_stripped(env):
+    root, _, _ = env
+    pdf = laid_out_pdf(
+        root / "papers" / "f.pdf",
+        [("Research Article Fuzzy Multidimensional Model to Cluster Dengue Risk", 20)],
+    )
+    title, _ = extract_pdf(pdf)
+    assert title == "Fuzzy Multidimensional Model to Cluster Dengue Risk"
+
+
+def test_title_falls_back_to_the_filename_when_nothing_is_usable(env):
+    root, _, _ = env
+    pdf = laid_out_pdf(root / "papers" / "only-numbers.pdf", [("15", 20), ("7", 10)])
+    title, _ = extract_pdf(pdf)
+    assert title == "only-numbers"
+
+
+def test_title_is_capped(env):
+    root, _, _ = env
+    pdf = laid_out_pdf(root / "papers" / "g.pdf", [("Dengue " * 80, 20)])
+    title, _ = extract_pdf(pdf)
+    assert len(title) <= 200
+
+
 def test_chunking_respects_size_and_overlap():
     text = "\n\n".join(f"Paragraph {i}. " + "word " * 60 for i in range(20))
     chunks = chunk_text(text, size=500, overlap=100)

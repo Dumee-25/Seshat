@@ -76,3 +76,58 @@ def test_outside_project_rejected(project: Path, tmp_path_factory):
     outside = tmp_path_factory.mktemp("elsewhere") / "train.py"
     outside.write_text("x", encoding="utf-8")
     assert not make_filter(project).should_index(outside)
+
+# -- heavyweight directories are matched case-insensitively ---------------------
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "Data/gen.py",
+        "DATA/gen.py",
+        "Checkpoints/load.py",
+        "MLruns/x/meta.py",
+        ".Venv/lib/pkg.py",
+        "nested/Data/gen.py",
+    ],
+)
+def test_ignored_dirs_match_regardless_of_case(project: Path, rel: str):
+    """The list is compared against real directories on filesystems that are
+    mostly case-insensitive; matching only the lowercase spelling meant a
+    project with "Data/" got none of the protection it promises."""
+    f = make_filter(project)
+    assert not f.should_index(touch(project, rel))
+
+
+def with_unignore(project: Path, names: list[str]) -> PathFilter:
+    config = project / "seshat.toml"
+    listed = ", ".join(f'"{n}"' for n in names)
+    config.write_text(
+        config.read_text(encoding="utf-8").replace("unignore = []", f"unignore = [{listed}]"),
+        encoding="utf-8",
+    )
+    return make_filter(project)
+
+
+def test_unignore_opts_a_directory_back_in(project: Path):
+    # Research projects really do keep pipeline scripts in "Data/" next to the
+    # data itself, and the ignore list is checked before the include globs, so
+    # without this there is no way to get them back.
+    f = with_unignore(project, ["Data"])
+    assert f.should_index(touch(project, "Data/downloader.py"))
+
+
+def test_unignore_is_itself_case_insensitive(project: Path):
+    f = with_unignore(project, ["data"])
+    assert f.should_index(touch(project, "DATA/downloader.py"))
+
+
+def test_unignore_does_not_open_up_the_other_directories(project: Path):
+    f = with_unignore(project, ["Data"])
+    assert not f.should_index(touch(project, ".venv/lib/pkg.py"))
+    assert not f.should_index(touch(project, "mlruns/x/meta.py"))
+
+
+def test_unignore_still_respects_the_include_globs(project: Path):
+    f = with_unignore(project, ["Data"])
+    assert not f.should_index(touch(project, "Data/raw.txt"))
