@@ -7,6 +7,18 @@ import {
   type DataPreview,
 } from "./api";
 import { Failed } from "./Failed";
+import { ArrowLeft } from "./icons";
+
+const SUMMARY_CHARS = 52;
+
+/** What the session did, or its id if there is nothing better to say. */
+function sessionLabel(whatChanged: string | null | undefined, id: number): string {
+  const what = whatChanged?.trim();
+  if (!what) return `session ${id}`;
+  return what.length > SUMMARY_CHARS
+    ? `${what.slice(0, SUMMARY_CHARS).trimEnd()}…`
+    : what;
+}
 
 function when(ts: string | null): string {
   if (!ts) return "";
@@ -73,22 +85,32 @@ export function Data({ onCite }: { onCite: (sessionId: number) => void }) {
     return (
       <div className="reader">
         <button className="ghost back" onClick={() => setDetail(null)}>
-          ← Data
+          <ArrowLeft size={14} />
+          Data
         </button>
         <h2 className="reader-title mono">{detail.artifact.path}</h2>
         {detail.sessions.length > 0 && (
-          <div className="produced-by">
-            {detail.sessions.map((s) => (
-              <button
-                key={s.session_id}
-                className="cite"
-                title={s.what_changed ?? ""}
-                onClick={() => onCite(s.session_id)}
-              >
-                session {s.session_id}
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="cites-head">
+              <span>Produced by</span>
+              <span className="cites-rule" />
+            </div>
+            <div className="produced-by">
+              {/* Same chip as a chat citation, and for the same reason: the
+                  session id says nothing about which run wrote this file. */}
+              {detail.sessions.map((s) => (
+                <button
+                  key={s.session_id}
+                  className="cite"
+                  title={s.what_changed ?? `session ${s.session_id}`}
+                  onClick={() => onCite(s.session_id)}
+                >
+                  <span className="cite-dot" />
+                  <span>{sessionLabel(s.what_changed, s.session_id)}</span>
+                </button>
+              ))}
+            </div>
+          </>
         )}
         <Preview preview={detail.preview} />
       </div>
@@ -119,7 +141,10 @@ export function Data({ onCite }: { onCite: (sessionId: number) => void }) {
                   .catch((e) => setError(String(e instanceof Error ? e.message : e)));
               }}
             >
-              <span className="src pdf">{a.kind}</span>
+              {/* Its own quiet mono label. This used to borrow `src pdf` — the
+                  gold PDF badge from Papers — so a CSV was labelled with
+                  another surface's vocabulary. */}
+              <span className="kind">{a.kind}</span>
               <span className="paper-title mono">{a.path}</span>
               <span className="paper-date">{when(a.created_at)}</span>
             </button>
