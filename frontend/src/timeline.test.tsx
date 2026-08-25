@@ -197,6 +197,103 @@ describe("review controls", () => {
   });
 });
 
+/**
+ * The row's whole job is to keep a guess from reading as a recorded fact. Both
+ * halves of that are easy to undo by accident — a styling tidy-up that drops
+ * the italic block, or a "let's just show the number" revert.
+ */
+describe("fact and inference stay distinguishable", () => {
+  it("sets an unconfirmed guess apart from the recorded title", async () => {
+    const { container } = await renderTimeline();
+    const row = rows()[0];
+
+    // The title is the record; the guess is a claim, and it lives in its own
+    // block rather than as a dimmer line of the same kind.
+    expect(row.querySelector(".row-title")!.textContent).toBe("Session 1");
+    expect(row.querySelector(".intent-text")!.textContent).toBe("guess 1");
+    expect(container.querySelector(".intent")).toBeTruthy();
+  });
+
+  it("folds a confirmed intent into the record", async () => {
+    mocked.getTimeline.mockResolvedValue({
+      items: [session(1, { intent_status: "confirmed" })],
+      total: 1,
+    });
+    const { container } = await renderTimeline();
+
+    // No longer a guess: the rule, the italic and the meter all go.
+    expect(container.querySelector(".intent")).toBeNull();
+    expect(container.querySelector(".meter")).toBeNull();
+    expect(container.querySelector(".intent-confirmed")!.textContent).toContain(
+      "guess 1",
+    );
+  });
+
+  it("still shows an intent that cannot be reviewed", async () => {
+    // A backfilled row has no entry id, so nothing can be confirmed — but the
+    // reason is the one thing a reader came for.
+    mocked.getTimeline.mockResolvedValue({
+      items: [session(1, { entry_id: undefined })],
+      total: 1,
+    });
+    const { container } = await renderTimeline();
+    expect(container.querySelector(".intent-confirmed")!.textContent).toContain(
+      "guess 1",
+    );
+    expect(screen.queryByRole("button", { name: "confirm" })).toBeNull();
+  });
+});
+
+describe("confidence", () => {
+  it("states a band rather than a decimal", async () => {
+    mocked.getTimeline.mockResolvedValue({
+      items: [session(1, { intent_confidence: 0.4 })],
+      total: 1,
+    });
+    const { container } = await renderTimeline();
+
+    expect(container.querySelector(".intent-band")!.textContent).toBe("low");
+    expect(screen.queryByText(/0\.4/)).toBeNull();
+  });
+
+  it("keeps the exact value reachable for anyone comparing two guesses", async () => {
+    mocked.getTimeline.mockResolvedValue({
+      items: [session(1, { intent_confidence: 0.4 })],
+      total: 1,
+    });
+    const { container } = await renderTimeline();
+    expect(container.querySelector(".meter")!.getAttribute("title")).toBe(
+      "confidence 0.40",
+    );
+  });
+
+  it("fills one segment per band", async () => {
+    mocked.getTimeline.mockResolvedValue({
+      items: [
+        session(1, { intent_confidence: 0.4 }),
+        session(2, { intent_confidence: 0.6 }),
+        session(3, { intent_confidence: 0.95 }),
+      ],
+      total: 3,
+    });
+    const { container } = await renderTimeline();
+    const filled = [...container.querySelectorAll(".meter")].map(
+      (m) => m.querySelectorAll(".meter-seg.on").length,
+    );
+    expect(filled).toEqual([1, 2, 3]);
+  });
+
+  it("draws no meter when the model reported no confidence", async () => {
+    mocked.getTimeline.mockResolvedValue({
+      items: [session(1, { intent_confidence: null })],
+      total: 1,
+    });
+    const { container } = await renderTimeline();
+    expect(container.querySelector(".intent-text")).toBeTruthy();
+    expect(container.querySelector(".meter")).toBeNull();
+  });
+});
+
 describe("paging and filters", () => {
   it("reports how much of the feed is on screen", async () => {
     mocked.getTimeline.mockResolvedValue({ items: [session(1)], total: 63 });

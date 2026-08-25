@@ -22,15 +22,15 @@ function citeDate(ts: string): string {
  * id means nothing to a reader deciding whether an answer is trustworthy;
  * when it happened and what it changed is the whole judgement.
  */
-function citeLabel(c: Citation): string {
+function citeParts(c: Citation): { date: string; summary: string } {
   const date = citeDate(c.started_at);
   const what = c.what_changed?.trim();
-  if (!what) return date || `session ${c.session_id}`;
+  if (!what) return { date: "", summary: date || `session ${c.session_id}` };
   const short =
     what.length > CITE_SUMMARY_CHARS
       ? `${what.slice(0, CITE_SUMMARY_CHARS).trimEnd()}…`
       : what;
-  return date ? `${date} · ${short}` : short;
+  return { date, summary: short };
 }
 
 /** Seconds since a question went out, so local generation doesn't look frozen. */
@@ -125,18 +125,32 @@ export function Chat({ onCite }: { onCite: (sessionId: number) => void }) {
               <div className="msg-text">{m.text}</div>
             )}
             {m.citations.length > 0 && (
-              <div className="cites">
-                {m.citations.map((c) => (
-                  <button
-                    key={c.session_id}
-                    className="cite"
-                    title={c.what_changed ?? `session ${c.session_id}`}
-                    onClick={() => onCite(c.session_id)}
-                  >
-                    {citeLabel(c)}
-                  </button>
-                ))}
-              </div>
+              <>
+                {/* An answer's citations are its "check my work" links, so they
+                    are labelled as such rather than left as a loose row of
+                    chips under the prose. */}
+                <div className="cites-head">
+                  <span>Drawn from</span>
+                  <span className="cites-rule" />
+                </div>
+                <div className="cites">
+                  {m.citations.map((c) => {
+                    const { date, summary } = citeParts(c);
+                    return (
+                      <button
+                        key={c.session_id}
+                        className="cite"
+                        title={c.what_changed ?? `session ${c.session_id}`}
+                        onClick={() => onCite(c.session_id)}
+                      >
+                        <span className="cite-dot" />
+                        {date && <span className="cite-date">{date}</span>}
+                        <span>{summary}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </div>
         ))}

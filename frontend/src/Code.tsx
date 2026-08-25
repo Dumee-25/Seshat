@@ -8,6 +8,7 @@ import {
   type FileNode,
 } from "./api";
 import { Failed } from "./Failed";
+import { Chevron } from "./icons";
 
 function when(ts: string | null): string {
   if (!ts) return "";
@@ -55,7 +56,10 @@ function TreeNode({
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        <span className="chevron">{open ? "▾" : "▸"}</span> {node.name}
+        <span className="chevron">
+          <Chevron open={open} />
+        </span>
+        {node.name}
       </button>
       {open &&
         node.children!.map((c) => (

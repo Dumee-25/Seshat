@@ -4,7 +4,7 @@ import { Chat } from "./Chat";
 import { Code } from "./Code";
 import { Data } from "./Data";
 import { Health } from "./Health";
-import { ICONS, Star } from "./icons";
+import { ICONS, Queue, Star } from "./icons";
 import { Papers } from "./Papers";
 import { Timeline } from "./Timeline";
 
@@ -62,25 +62,34 @@ function StatusBar({ link, status }: { link: Link; status: Status | null }) {
         : " · processing";
   }
 
+  // Four equal spans made the one genuinely interesting state — why a stalled
+  // queue is stalled — the hardest thing in the footer to notice. The counts
+  // stay quiet on the left; a blocked queue gets weight and its own edge.
+  const blocked = !!status && status.queued > 0;
+
   return (
     <footer className="statusbar">
-      <span>
+      <span className="link">
         <span className={`dot ${link}`} />
         {label}
       </span>
+      {status && <span className="sep" />}
       {status && <span>{status.sessions} sessions</span>}
+      {status && <span className="dim">·</span>}
+      {status && <span>{status.papers} papers</span>}
       {status && (
         <span
+          className={`queue${blocked ? " blocked" : ""}`}
           title={
             status.queued === 0
               ? "Every captured session has a journal entry."
               : "Sessions captured but not yet journaled. Seshat waits for the GPU to be idle so it never competes with a training run."
           }
         >
+          {blocked && <Queue />}
           {status.queued} queued{queuedNote}
         </span>
       )}
-      {status && <span>{status.papers} papers</span>}
     </footer>
   );
 }
@@ -172,12 +181,23 @@ export function App() {
               </button>
             );
           })}
+
+          <div className="sidebar-foot">
+            <div className="sidebar-foot-label">Project</div>
+            <div className="sidebar-foot-name">
+              {status ? status.project : "…"}
+            </div>
+          </div>
         </nav>
 
         <main className="main">
-          <h1 className="view-title">{TITLES[view][0]}</h1>
-          <div className="view-sub">
-            {status ? status.project : "…"} · {TITLES[view][1]}
+          {/* One band rather than a stacked title and subtitle: the old pair
+              restated the nav item just clicked and cost ~66px of every
+              surface — on the timeline, most of a row. The project name moved
+              to the sidebar, where it belongs to the whole window. */}
+          <div className="view-head">
+            <h1 className="view-title">{TITLES[view][0]}</h1>
+            <span className="view-sub">{TITLES[view][1]}</span>
           </div>
 
           {setup && !setup.ok && <Health setup={setup} />}

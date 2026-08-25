@@ -8,6 +8,7 @@ import {
   type PaperListItem,
 } from "./api";
 import { Failed } from "./Failed";
+import { ArrowLeft } from "./icons";
 
 function when(ts: string | null): string {
   if (!ts) return "";
@@ -60,7 +61,8 @@ export function Papers() {
     return (
       <div className="reader">
         <button className="ghost back" onClick={() => setSelected(null)}>
-          ← Papers &amp; links
+          <ArrowLeft size={14} />
+          Papers &amp; links
         </button>
         <h2 className="reader-title">{selected.title}</h2>
         <div className="reader-meta">

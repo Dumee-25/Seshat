@@ -6,6 +6,7 @@ import {
   type IntentStatus,
   type TimelineItem,
 } from "./api";
+import { ArrowRight, Check, Chevron, Pencil } from "./icons";
 import { SessionDetail } from "./SessionDetail";
 
 const MARKER: Record<string, string> = {
@@ -172,6 +173,39 @@ function useIntent(item: TimelineItem, onChange: () => void) {
 
 type Intent = ReturnType<typeof useIntent>;
 
+/**
+ * Confidence as one of three bands rather than as the raw float.
+ *
+ * `0.4` claims two significant figures a local model does not have, and no
+ * reader calibrates on a decimal at a glance. The exact value is still there
+ * on hover, for anyone comparing two guesses.
+ */
+const BANDS = [
+  { below: 0.5, segments: 1, className: "band-low", label: "low" },
+  { below: 0.8, segments: 2, className: "band-mid", label: "medium" },
+  { below: Infinity, segments: 3, className: "band-high", label: "high" },
+];
+
+function Confidence({ value }: { value: number }) {
+  const band = BANDS.find((b) => value < b.below)!;
+  return (
+    <>
+      <span
+        className={`meter ${band.className}`}
+        title={`confidence ${value.toFixed(2)}`}
+      >
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className={`meter-seg${i < band.segments ? " on" : ""}`}
+          />
+        ))}
+      </span>
+      <span className={`intent-band ${band.className}`}>{band.label}</span>
+    </>
+  );
+}
+
 function IntentControls({ ctl }: { ctl: Intent }) {
   const [draft, setDraft] = useState("");
 
@@ -181,71 +215,104 @@ function IntentControls({ ctl }: { ctl: Intent }) {
     if (ctl.editing) setDraft(ctl.intent ?? "");
   }, [ctl.editing, ctl.intent]);
 
-  if (!ctl.reviewable) return null;
+  // An entry can carry an intent without being reviewable — a backfilled row,
+  // or one whose entry id never came back. Show it, plainly, rather than
+  // dropping the only answer to "why".
+  if (!ctl.reviewable) {
+    return ctl.intent ? (
+      <div className="intent-confirmed">
+        <span>{ctl.intent}</span>
+      </div>
+    ) : null;
+  }
 
-  const label =
-    ctl.unreviewed && ctl.confidence != null
-      ? `inferred · ${ctl.confidence.toFixed(1)}`
-      : ctl.status;
+  // Reviewed: the guess is settled, so it stops looking like a guess and joins
+  // the record. Undo stays, because a fast click is only safe if it is cheap
+  // to take back.
+  if (!ctl.unreviewed && !ctl.editing) {
+    return (
+      <>
+        <div className="intent-confirmed">
+          <Check size={14} />
+          <span>{ctl.intent}</span>
+          <span className="who">you {ctl.status}</span>
+          <button
+            className="undo"
+            aria-label="undo"
+            disabled={ctl.busy}
+            onClick={ctl.undo}
+          >
+            undo
+          </button>
+        </div>
+        {ctl.error && <div className="chat-error">{ctl.error}</div>}
+      </>
+    );
+  }
 
   return (
     <>
-      <span className={`badge ${ctl.status}`}>{label}</span>
-      {ctl.unreviewed && !ctl.editing && (
-        <>
-          <button
-            className="link-btn confirm"
-            disabled={ctl.busy}
-            onClick={ctl.confirm}
-          >
-            confirm
-          </button>
-          <button
-            className="link-btn"
-            disabled={ctl.busy}
-            onClick={() => ctl.setEditing(true)}
-          >
-            edit
-          </button>
-        </>
-      )}
-      {/* A third of guesses are expected to be wrong, so triage is fast and
-          clicky — which is only safe if the click is reversible. */}
-      {!ctl.unreviewed && (
-        <button className="link-btn" disabled={ctl.busy} onClick={ctl.undo}>
-          undo
-        </button>
-      )}
-      {ctl.editing && (
-        <div className="intent-editor">
-          <textarea
-            value={draft}
-            autoFocus
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") ctl.setEditing(false);
-            }}
-            placeholder="What were you actually trying to do?"
-          />
-          <div className="intent-actions">
+      <div className="intent">
+        <div className="intent-body">
+          <div className="intent-label">
+            <span>Seshat guessed</span>
+            {ctl.confidence != null && <Confidence value={ctl.confidence} />}
+          </div>
+          <div className="intent-text">{ctl.intent}</div>
+          {ctl.editing && (
+            <div className="intent-editor">
+              <textarea
+                value={draft}
+                autoFocus
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") ctl.setEditing(false);
+                }}
+                placeholder="What were you actually trying to do?"
+              />
+              <div className="intent-actions">
+                <button
+                  className="primary"
+                  disabled={ctl.busy || !draft.trim()}
+                  onClick={() => ctl.correct(draft)}
+                >
+                  Save
+                </button>
+                <button
+                  className="ghost"
+                  disabled={ctl.busy}
+                  onClick={() => ctl.setEditing(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+              {ctl.error && <div className="chat-error">{ctl.error}</div>}
+            </div>
+          )}
+        </div>
+        {/* A third of guesses are expected to be wrong, so triage is fast and
+            clicky — which is only safe if the click is reversible. These sit
+            beside the guess they judge rather than up in the row header. */}
+        {!ctl.editing && (
+          <div className="triage">
             <button
-              className="primary"
-              disabled={ctl.busy || !draft.trim()}
-              onClick={() => ctl.correct(draft)}
+              className="confirm"
+              aria-label="confirm"
+              disabled={ctl.busy}
+              onClick={ctl.confirm}
             >
-              Save
+              <Check />
             </button>
             <button
-              className="ghost"
+              aria-label="edit"
               disabled={ctl.busy}
-              onClick={() => ctl.setEditing(false)}
+              onClick={() => ctl.setEditing(true)}
             >
-              Cancel
+              <Pencil />
             </button>
           </div>
-          {ctl.error && <div className="chat-error">{ctl.error}</div>}
-        </div>
-      )}
+        )}
+      </div>
       {!ctl.editing && ctl.error && <div className="chat-error">{ctl.error}</div>}
     </>
   );
@@ -274,7 +341,6 @@ function Row({
   onToggle: () => void;
   onIntentChange: () => void;
 }) {
-  const why = item.meta.intent as string | null | undefined;
   const isSession = item.kind === "session";
   const ctl = useIntent(item, onIntentChange);
 
@@ -321,19 +387,29 @@ function Row({
     >
       <div className="row-head">
         <span className="row-kind">{item.kind}</span>
-        {isSession && <IntentControls ctl={ctl} />}
         <span className="row-time">{timeLabel(item.ts)}</span>
       </div>
       <div className="row-title">{item.title}</div>
-      {item.subtitle && <div className="row-sub">{item.subtitle}</div>}
-      {why && <div className="row-why">Why: {why}</div>}
+      {item.subtitle &&
+        (isSession ? (
+          // A session's subtitle is what the change did, so it reads as a
+          // consequence. Everything else's is a path.
+          <div className="row-sub outcome">
+            <ArrowRight size={15} />
+            <span>{item.subtitle}</span>
+          </div>
+        ) : (
+          <div className="row-sub path">{item.subtitle}</div>
+        ))}
+      {isSession && <IntentControls ctl={ctl} />}
       {isSession && (
         <button
-          className="link-btn evidence-toggle"
+          className="evidence-toggle"
           aria-expanded={expanded}
           onClick={onToggle}
         >
-          {expanded ? "▾ hide evidence" : "▸ show evidence"}
+          <Chevron open={expanded} size={10} />
+          {expanded ? "hide evidence" : "show evidence"}
         </button>
       )}
       {isSession && expanded && <SessionDetail sessionId={item.id} />}

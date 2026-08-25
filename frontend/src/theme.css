@@ -1,4 +1,8 @@
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+/* Fraunces carries an `ital` axis because the model's voice — an intent it
+   guessed at and you have not confirmed — is set in italic. Without the axis
+   the browser synthesises an oblique, which is exactly the sloppy signal that
+   distinction cannot afford. */
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
 
 :root {
   --kohl: #16130f;
@@ -6,8 +10,16 @@
   --panel-2: #241f16;
   --sand: #e6dcc4;
   --sand-dim: #bfb49a;
+  /* --muted is the floor, not a middle step: it clears 4.5:1 on --kohl by
+     0.19 and misses it on --panel (4.47:1). Anything dimmer fails outright,
+     so hierarchy below --sand-dim comes from size, weight and the mono face
+     rather than from another grey. On --panel, step up to --sand-dim. */
   --muted: #8a7f68;
   --border: #3a3225;
+  /* Separator hairline, dimmer than --border. Decorative only — never the
+     edge of a control. Replaces the half-transparent literal that used to be
+     written out at each call site. */
+  --rule: #2b251b;
   --gold: #c9a227;
   --rubric: #a63a2b;
   --rubric-text: #d98a76;
@@ -121,10 +133,12 @@ body {
   text-align: left;
   width: 100%;
 }
+/* No border-radius here: it used to force 6px onto everything focusable, so
+   the ring cut corners off the 10px chips and badges and the 8px nav items.
+   Each control keeps its own radius and the ring traces it. */
 :focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
-  border-radius: 6px;
 }
 .nav-item {
   display: flex;
@@ -171,11 +185,42 @@ body {
   overflow-y: auto;
   padding-right: 10px;
 }
+/* Title and descriptor on one line, with the rule the surfaces used to draw
+   for themselves. Fraunces stays here — a surface title is exactly the kind
+   of identity work a display face is for. */
+.view-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding-bottom: 13px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
 .view-title {
   font-family: var(--serif);
-  font-size: 22px;
-  margin: 0 0 2px;
+  font-size: 20px;
+  margin: 0;
   font-weight: 500;
+}
+
+.sidebar-foot {
+  margin-top: auto;
+  padding: 10px 10px 4px;
+  border-top: 1px solid var(--border);
+}
+.sidebar-foot-label {
+  font-size: 9.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.sidebar-foot-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--sand-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .skeleton {
@@ -193,9 +238,6 @@ body {
 .view-sub {
   color: var(--muted);
   font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin-bottom: 18px;
 }
 
 /* Timeline: filter bar stays put, feed scrolls under it. */
@@ -310,22 +352,32 @@ body {
   margin-left: 6px;
   padding-left: 0;
 }
+/* Date is the strongest structural signal a timeline has. It used to be the
+   lowest-contrast text on the page, and it is sticky, so it is on screen the
+   whole time you are scanning. */
 .day-head {
   position: sticky;
   top: -1px;
   background: var(--kohl);
-  padding: 10px 0 6px 22px;
-  font-size: 10.5px;
-  letter-spacing: 0.14em;
+  padding: 14px 0 8px 22px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--sand-dim);
   z-index: 1;
 }
 .row {
   position: relative;
-  padding: 12px 0 12px 22px;
-  border-bottom: 1px solid rgba(58, 50, 37, 0.5);
+  padding: 14px 0 16px 22px;
+  border-bottom: 1px solid var(--rule);
   animation: row-in 0.3s ease-out both;
+}
+/* Every other list in the app had a hover state; the one row you can also
+   drive from the keyboard did not. (It stays a div rather than a button
+   because it contains buttons of its own.) */
+.row:hover {
+  background: var(--panel);
 }
 .row.flashing {
   animation:
@@ -335,18 +387,19 @@ body {
 .row::before {
   content: "";
   position: absolute;
-  left: -7px;
-  top: 18px;
-  width: 11px;
-  height: 3px;
-  background: var(--marker, var(--muted));
-  border-radius: 2px;
+  left: -6px;
+  top: 16px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--kohl);
+  border: 2px solid var(--marker, var(--muted));
 }
 .row-head {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 7px;
 }
 .row-kind {
   font-size: 10px;
@@ -354,48 +407,196 @@ body {
   text-transform: uppercase;
   color: var(--marker, var(--muted));
 }
+/* Mono, because the clock produced it. */
 .row-time {
-  font-size: 11px;
+  font-family: var(--mono);
+  font-size: 10.5px;
   color: var(--muted);
   margin-left: auto;
   white-space: nowrap;
 }
+/* The recorded fact. Sans rather than Fraunces: this is a scan-dense list and
+   Fraunces is a display face. Capped so a wide window cannot run a title past
+   a readable measure. */
 .row-title {
-  margin: 4px 0 2px;
-  font-family: var(--serif);
-  font-size: 15.5px;
-  line-height: 1.4;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.45;
   color: var(--sand);
+  max-width: 72ch;
 }
 .row-sub {
+  margin-top: 6px;
   color: var(--sand-dim);
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.5;
+  max-width: 72ch;
 }
-.row-why {
+/* A path is not prose. */
+.row-sub.path {
+  font-family: var(--mono);
+  font-size: 11.5px;
   color: var(--muted);
-  font-size: 12.5px;
-  line-height: 1.4;
+}
+/* A session's observable outcome, marked as a consequence of the change. */
+.row-sub.outcome {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+.row-sub.outcome > svg {
+  flex-shrink: 0;
   margin-top: 2px;
+  color: var(--faience-text);
 }
 
-/* Inline intent confirm / correct — the cockpit's one write-back. */
-.link-btn {
+/* The model's voice, kept visibly apart from the record.
+ *
+ * This is the whole trust argument in one block. Seshat's case for guessing at
+ * intent is that a wrong guess is cheap *because you can see it is a guess* —
+ * which only holds if a guess does not read like a recorded fact. It gets its
+ * own rule, its own italic face, and its confidence stated as a band. */
+.intent {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  margin-top: 11px;
+  padding: 9px 0 9px 13px;
+  border-left: 2px solid rgba(201, 162, 39, 0.45);
+  max-width: 72ch;
+}
+.intent-body {
+  flex: 1;
+  min-width: 0;
+}
+.intent-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 5px;
+  font-size: 9.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.intent-text {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--sand);
+}
+
+/* Three bands rather than a decimal: a local model's 0.4 does not carry two
+   significant figures, and nobody calibrates on a float at a glance. */
+.meter {
+  display: inline-flex;
+  gap: 2px;
+}
+.meter-seg {
+  width: 13px;
+  height: 3px;
+  border-radius: 1.5px;
+  background: var(--border);
+}
+.meter-seg.on {
+  background: var(--band);
+}
+.intent-band {
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--band);
+}
+.band-low {
+  --band: var(--rubric-text);
+}
+.band-mid {
+  --band: var(--gold);
+}
+.band-high {
+  --band: var(--faience-text);
+}
+
+/* Triage sits with the guess it judges rather than three lines above it in
+   the row header — and is a real target rather than an 11px text span, which
+   is what the cockpit's only write-back used to be. */
+.triage {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.triage button {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.triage button.confirm {
+  border-color: rgba(47, 126, 120, 0.6);
+  background: rgba(47, 126, 120, 0.1);
+  color: var(--faience-text);
+}
+.triage button:hover:not(:disabled) {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.triage button:active:not(:disabled) {
+  transform: scale(0.95);
+}
+.triage button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Confirmed, the guess stops being one: the rule, the italic and the meter go
+   and it joins the record. The feed ends up emphasising what still needs
+   review, which is the only thing in it you can act on. */
+.intent-confirmed {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 9px;
+  max-width: 72ch;
+  color: var(--sand);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.intent-confirmed > svg {
+  flex-shrink: 0;
+  color: var(--faience-text);
+}
+.intent-confirmed .who {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.intent-confirmed .undo {
   background: none;
   border: none;
-  padding: 0;
-  font-family: var(--sans);
+  padding: 4px 8px;
+  font: inherit;
   font-size: 11px;
   color: var(--muted);
   cursor: pointer;
+  border-radius: 6px;
 }
-.link-btn.confirm {
-  color: var(--faience-text);
+.intent-confirmed .undo:hover:not(:disabled) {
+  color: var(--gold);
 }
-.link-btn:hover:not(:disabled) {
-  text-decoration: underline;
-}
-.link-btn:disabled {
+.intent-confirmed .undo:disabled {
   opacity: 0.5;
   cursor: default;
 }
@@ -452,28 +653,27 @@ body {
   opacity: 0.5;
   cursor: default;
 }
-.badge {
-  font-size: 11px;
-  padding: 1px 8px;
-  border-radius: 10px;
-  border: 1px solid var(--muted);
-  color: var(--muted);
-}
-.badge.inferred {
-  border-color: var(--rubric);
-  color: var(--rubric-text);
-}
-.badge.confirmed {
-  border-color: var(--faience);
-  color: var(--faience-text);
-}
-
 /* Session evidence: the raw events behind a journal entry. */
 .evidence-toggle {
-  display: block;
-  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 11px;
+  padding: 6px 11px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-family: var(--sans);
   font-size: 11.5px;
   color: var(--sand-dim);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.evidence-toggle:hover {
+  border-color: var(--gold);
+  color: var(--gold);
 }
 .detail {
   margin: 10px 0 4px;
@@ -496,7 +696,7 @@ body {
   font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--sand-dim);
 }
 .ev {
   border-top: 1px solid var(--border);
@@ -524,7 +724,7 @@ body {
   white-space: nowrap;
 }
 .ev-none {
-  color: var(--muted);
+  color: var(--sand-dim);
   font-style: italic;
   font-size: 12.5px;
 }
@@ -575,7 +775,7 @@ body {
   margin-bottom: 4px;
 }
 .commit-files {
-  color: var(--muted);
+  color: var(--sand-dim);
   margin-bottom: 8px;
 }
 .nb-flags {
@@ -590,7 +790,7 @@ body {
   font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--sand-dim);
   margin-bottom: 4px;
 }
 .cell-label.add {
@@ -611,7 +811,7 @@ body {
 .cell-output {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--muted);
+  color: var(--sand-dim);
   padding: 3px 10px;
   border-left: 2px solid var(--border);
   white-space: pre-wrap;
@@ -620,14 +820,41 @@ body {
 
 .statusbar {
   border-top: 1px solid var(--border);
-  padding: 8px 28px;
+  padding: 9px 28px;
   display: flex;
-  gap: 18px;
+  gap: 14px;
   flex-wrap: wrap;
   align-items: center;
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--muted);
   flex-shrink: 0;
+}
+.statusbar .link {
+  color: var(--sand-dim);
+}
+.statusbar .sep {
+  width: 1px;
+  height: 12px;
+  background: var(--border);
+}
+.statusbar .dim {
+  color: var(--border);
+}
+/* Pushed to the far end and given an edge, because a queue that is not
+   draining is the one thing here worth reading — and the reason it is not
+   draining is the difference between "working as designed" and "broken". */
+.statusbar .queue {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.statusbar .queue.blocked {
+  padding: 3px 11px;
+  border-radius: 7px;
+  border: 1px solid rgba(201, 162, 39, 0.4);
+  background: rgba(201, 162, 39, 0.08);
+  color: var(--gold);
 }
 .dot {
   width: 8px;
@@ -702,24 +929,27 @@ body {
   min-height: 0;
 }
 .msg {
-  margin-bottom: 14px;
-  max-width: 90%;
+  margin-bottom: 20px;
 }
 .msg.user {
   margin-left: auto;
   text-align: right;
+  max-width: 70%;
 }
 .msg.user .msg-text {
   display: inline-block;
   background: var(--panel-2);
-  padding: 8px 12px;
+  padding: 9px 13px;
   border-radius: 10px;
   text-align: left;
 }
+/* A generated answer is the longest prose in the app. It was set in a display
+   face at 90% of the window — which on a wide one is well past 140 characters
+   a line. Sans, and a real measure. Headings inside it keep Fraunces. */
 .msg.assistant .msg-text {
-  font-family: var(--serif);
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: 14.5px;
+  line-height: 1.7;
+  max-width: 68ch;
 }
 .msg-text.thinking {
   color: var(--muted);
@@ -787,18 +1017,40 @@ h6.md-h {
   white-space: pre-wrap;
   word-break: break-word;
 }
+.cites-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 15px;
+  max-width: 68ch;
+  font-size: 9.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.cites-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
 .cites {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 7px;
+  margin-top: 9px;
+  max-width: 68ch;
 }
 .cite {
-  font-size: 11px;
-  padding: 2px 9px;
-  border-radius: 10px;
-  border: 1px solid var(--gold);
-  color: var(--gold);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sans);
+  font-size: 12px;
+  padding: 6px 11px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  color: var(--sand-dim);
   background: transparent;
   cursor: pointer;
   max-width: 100%;
@@ -806,9 +1058,26 @@ h6.md-h {
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.cite-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--gold);
+  flex-shrink: 0;
+}
+.cite-date {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  flex-shrink: 0;
 }
 .cite:hover {
-  background: rgba(201, 162, 39, 0.12);
+  border-color: var(--gold);
+  color: var(--gold);
 }
 .chat-error {
   color: var(--rubric-text);
@@ -902,7 +1171,7 @@ h6.md-h {
   align-items: center;
   gap: 12px;
   padding: 11px 4px;
-  border-bottom: 1px solid rgba(58, 50, 37, 0.5);
+  border-bottom: 1px solid var(--rule);
   cursor: pointer;
 }
 .paper-row:hover {
@@ -935,14 +1204,39 @@ h6.md-h {
   border-color: var(--gold);
   color: var(--gold);
 }
+/* An artifact's kind is a fact about a file, not a source you read — so it is
+   mono and quiet rather than a coloured badge borrowed from Papers. */
+.kind {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  color: var(--sand-dim);
+  flex-shrink: 0;
+}
 .reader .back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   background: transparent;
   border: 1px solid var(--border);
-  color: var(--muted);
+  color: var(--sand-dim);
   border-radius: 8px;
-  padding: 5px 12px;
+  padding: 6px 12px;
+  font-family: var(--sans);
+  font-size: 12.5px;
   cursor: pointer;
   margin-bottom: 16px;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.reader .back:hover {
+  border-color: var(--gold);
+  color: var(--gold);
 }
 .reader-title {
   font-family: var(--serif);
@@ -1010,8 +1304,9 @@ h6.md-h {
   background: var(--panel-2);
 }
 .chevron {
+  display: inline-flex;
+  align-items: center;
   color: var(--muted);
-  font-size: 10px;
 }
 .file-name {
   flex: 1;
@@ -1031,7 +1326,7 @@ h6.md-h {
   align-items: center;
   gap: 12px;
   padding: 9px 4px;
-  border-bottom: 1px solid rgba(58, 50, 37, 0.5);
+  border-bottom: 1px solid var(--rule);
   cursor: pointer;
 }
 .hist-row:hover,
@@ -1054,8 +1349,9 @@ h6.md-h {
 /* Data */
 .produced-by {
   display: flex;
-  gap: 6px;
-  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 9px 0 20px;
 }
 .table-wrap {
   overflow: auto;
