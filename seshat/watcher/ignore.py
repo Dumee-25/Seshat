@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pathspec
 
-from seshat.config import ALWAYS_IGNORED_DIRS, SeshatConfig
+from seshat.config import SeshatConfig, is_ignored_dir, unignored_dirs
 
 RESULT_SUFFIXES = (".csv", ".json")
 PAPER_MAX_BYTES = 100 * 1024 * 1024  # PDFs routinely exceed the code-file cap
@@ -24,6 +24,7 @@ class PathFilter:
         self._max_bytes = int(config.watch.max_file_size_mb * 1024 * 1024)
         self._results_dir = config.watch.results_dir
         self._papers_dir = config.watch.papers_dir
+        self._unignored = unignored_dirs(config)
         self._include = pathspec.PathSpec.from_lines("gitwildmatch", config.watch.include)
         self._exclude = pathspec.PathSpec.from_lines("gitwildmatch", config.watch.exclude)
         self._gitignore = None
@@ -56,11 +57,14 @@ class PathFilter:
             return False
         return rel.startswith(self._papers_dir + "/") and path.suffix.lower() == ".pdf"
 
+    def _in_ignored_dir(self, rel: str) -> bool:
+        return any(is_ignored_dir(part, self._unignored) for part in Path(rel).parts)
+
     def should_index(self, path: Path) -> bool:
         rel = self.relative(path)
         if rel is None:
             return False
-        if any(part in ALWAYS_IGNORED_DIRS for part in Path(rel).parts):
+        if self._in_ignored_dir(rel):
             return False
         if self._exclude.match_file(rel):
             return False

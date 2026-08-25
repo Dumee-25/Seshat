@@ -26,6 +26,23 @@ ALWAYS_IGNORED_DIRS = frozenset(
     }
 )
 
+
+def unignored_dirs(config: SeshatConfig) -> frozenset[str]:
+    """Case-folded names the project opts back in to watching."""
+    return frozenset(name.casefold() for name in config.watch.unignore)
+
+
+def is_ignored_dir(name: str, unignored: frozenset[str] = frozenset()) -> bool:
+    """Whether a single path segment is a heavyweight directory to skip.
+
+    Case-folded: these names are matched against real directories on
+    filesystems that are mostly case-insensitive, and comparing only the
+    lowercase spelling meant a project with "Data/" got none of the
+    protection the list is supposed to give.
+    """
+    folded = name.casefold()
+    return folded in ALWAYS_IGNORED_DIRS and folded not in unignored
+
 _TEMPLATE = """\
 # Seshat project configuration — created by `seshat init`.
 # Globs are relative to this file's directory (the project root).
@@ -35,8 +52,12 @@ name = "{name}"
 
 [watch]
 include = ["**/*.ipynb", "**/*.py"]
-# Extends the built-in ignore list (.git, .venv, data, mlruns, checkpoints, ...).
+# Extends the built-in ignore list (.git, .venv, data, mlruns, checkpoints, ...),
+# which is matched case-insensitively -- "Data" is ignored just like "data".
 exclude = []
+# Directory names to keep watching despite that built-in list, e.g. a "Data"
+# folder that holds real pipeline scripts alongside the data itself.
+unignore = []
 respect_gitignore = true
 max_file_size_mb = 5
 results_dir = "results"
@@ -71,6 +92,11 @@ class WatchConfig:
     max_file_size_mb: float = 5.0
     results_dir: str = "results"
     papers_dir: str = "papers"
+    # Directory names to keep watching even though they are on the built-in
+    # heavyweight ignore list -- the only way to opt back in, since that list
+    # is checked before the include globs. Matched case-insensitively, like
+    # the list itself.
+    unignore: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -136,6 +162,7 @@ def load_config(root: Path) -> SeshatConfig:
         max_file_size_mb=_get_number(raw, "watch", "max_file_size_mb", default=5.0),
         results_dir=_get(raw, "watch", "results_dir", str, default="results"),
         papers_dir=_get(raw, "watch", "papers_dir", str, default="papers"),
+        unignore=_get_str_list(raw, "watch", "unignore", default=[]),
     )
     session = SessionConfig(
         idle_gap_minutes=int(_get_number(raw, "session", "idle_gap_minutes", default=45)),

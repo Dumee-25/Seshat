@@ -107,13 +107,16 @@ To build a double-click Windows installer (`SeshatSetup.exe`) from source, see [
 
 ## Configuration
 
-`seshat init` writes a commented `seshat.toml`. The defaults respect `.gitignore`, always ignore heavyweight directories (`.venv/`, `data/`, `mlruns/`, checkpoints), skip files over 5 MB, close sessions after 45 idle minutes, and use the local Ollama provider. All of it is adjustable:
+`seshat init` writes a commented `seshat.toml`. The defaults respect `.gitignore`, always ignore heavyweight directories (`.venv/`, `data/`, `mlruns/`, checkpoints -- matched without regard to case, so a `Data/` folder counts), skip files over 5 MB, close sessions after 45 idle minutes, and use the local Ollama provider. All of it is adjustable:
 
 ```toml
 [watch]
 include = ["**/*.ipynb", "**/*.py"]
 results_dir = "results"
 papers_dir = "papers"
+# Keep watching a folder the built-in list would otherwise skip -- e.g. a
+# "Data" directory that holds real pipeline scripts, not just data.
+unignore = []
 
 [session]
 idle_gap_minutes = 45

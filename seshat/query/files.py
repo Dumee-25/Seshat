@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from seshat.config import ALWAYS_IGNORED_DIRS, SeshatConfig
+from seshat.config import SeshatConfig, is_ignored_dir, unignored_dirs
 from seshat.store.db import Store
 from seshat.watcher.ignore import PathFilter
 
@@ -24,9 +24,10 @@ def code_files(root: Path, config: SeshatConfig) -> list[str]:
     """Project-relative paths of watched code files that exist now."""
     root = Path(root)
     path_filter = PathFilter(root, config)
+    unignored = unignored_dirs(config)
     out = []
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in ALWAYS_IGNORED_DIRS]
+        dirnames[:] = [d for d in dirnames if not is_ignored_dir(d, unignored)]
         for name in filenames:
             path = Path(dirpath) / name
             if path.suffix in CODE_SUFFIXES and path_filter.should_index(path):

@@ -18,7 +18,7 @@ from pathlib import Path
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-from seshat.config import ALWAYS_IGNORED_DIRS, SeshatConfig
+from seshat.config import SeshatConfig, is_ignored_dir, unignored_dirs
 from seshat.papers.ingest import PaperIngestError, ingest_pdf
 from seshat.store.db import Store
 from seshat.store.vectors import VectorStore
@@ -161,8 +161,9 @@ class WatchService:
     def _walk_files(self):
         """Like rglob, but prunes ignored directories instead of descending
         into them — data/, .venv/, mlruns/ can hold millions of files."""
+        unignored = unignored_dirs(self._config)
         for dirpath, dirnames, filenames in os.walk(self.root):
-            dirnames[:] = [d for d in dirnames if d not in ALWAYS_IGNORED_DIRS]
+            dirnames[:] = [d for d in dirnames if not is_ignored_dir(d, unignored)]
             for name in filenames:
                 yield Path(dirpath) / name
 
